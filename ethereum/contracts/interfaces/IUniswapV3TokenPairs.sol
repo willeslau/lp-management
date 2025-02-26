@@ -10,7 +10,7 @@ struct TokenPair {
 }
 
 library LibTokenId {
-    function isValidTokenPairId(uint8 _id) internal pure returns(bool) {
+    function isValidTokenPairId(uint8 _id) internal pure returns (bool) {
         return _id != 0;
     }
 }
@@ -19,7 +19,14 @@ interface IUniswapV3TokenPairs {
     /// @dev returns the full token pair information by id
     function getTokenPair(uint8 _id) external returns (TokenPair memory);
 
-    function getTokenPairId(address _token0, address _token1) external returns (uint8);
+    function getTokenPairId(
+        address _token0,
+        address _token1
+    ) external returns (uint8);
+
+    function getTokenPairAddresses(
+        uint8 _id
+    ) external returns (address, address);
 
     /// @dev returns false if the token pair id is not supported
     function isSupportTokenPair(uint8 _id) external returns (bool);

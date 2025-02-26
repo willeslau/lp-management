@@ -18,5 +18,16 @@ task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
  * @type import('hardhat/config').HardhatUserConfig
  */
 module.exports = {
-  solidity: "0.8.28"
+  solidity: "0.8.28",
+  settings: {
+    viaIR: true,
+    optimizer: {
+      enabled: true,
+      details: {
+        yulDetails: {
+          optimizerSteps: "u",
+        },
+      },
+    },
+  }
 };
