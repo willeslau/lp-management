@@ -9,44 +9,66 @@ import {IUniswapV3TokenPairs, TokenPair, LibTokenId} from "./interfaces/IUniswap
 import {INonfungiblePositionManager, MintParams, IncreaseLiquidityParams, CollectParams, DecreaseLiquidityParams} from "./interfaces/INonfungiblePositionManager.sol";
 import {LibPercentageMath} from "./RateMath.sol";
 
+/// @notice Represents the deposit of an NFT
+struct Deposit {
+    uint8 tokenPair;
+    /// @notice One can dynamically query the position of the deposit
+    /// @notice but it saves slight gas if stored locally in this contract
+    uint128 liquidity;
+
+    /// @notice The total fee collected
+    uint256 fee0;
+    uint256 fee1;
+}
+
+/// @notice The list of parameters for uniswap V3 liquidity operations
+struct OperationParams {
+    /// @notice True means the fee collected will be used into new position
+    bool isCompoundFee;
+    /// @notice The max slippage allowed when providing liquidity
+    uint16 maxMintSlippageRate;
+}
+
+struct RebalanceParams {
+    uint8 tokenId;
+
+    /// @dev for withdraw liquidity slippage protection
+    uint256 amount0WithdrawMin;
+    uint256 amount1WithdrawMin;
+
+    uint16 swapSlippage;
+
+    /// @dev new amounts to provide to the LP pool
+    uint256 newAmount0;
+    uint256 newAmount1;
+
+    /// @dev new price range
+    int24 tickLower;
+    int24 tickUpper;
+}
+
+error CallerNotPositionNFT(address caller);
+error DuplicatedPosition(uint256 tokenId);
+/// @dev This is a sanity check error. It means uniswap minted a token pair this contract does not support.
+error MintedUnsupportedTokenPair();
+error TokenPairIdNotSupported(uint8 tokenPairId);
+error NotLiquidityOwner(address sender);
+error NotBalancer(address sender);
+/// @dev This means current contract is not the owner of the position nft from uniswap
+error PositionNFTNotReceived(uint256 tokenId);
+error NotOwningPositionNFT(uint256 tokenId);
+error NotSwapable(uint256 reserve0, uint256 reserve1, uint256 target0, uint256 target1);
+
 contract UniswapV3LpHandler is IERC721Receiver {
     using LibTokenId for uint8;
     using SafeERC20 for IERC20;
-
-    struct PositionInfo {
-        address token0;
-        address token1;
-        uint128 liquidity;
-    }
-
-    /// @notice Represents the deposit of an NFT
-    struct Deposit {
-        uint8 tokenPair;
-        /// @dev One can dynamically query the position of the deposit
-        /// @dev but it saves slight gas if stored locally in this contract
-        uint128 liquidity;
-    }
-
-    /// @notice The list of parameters for uniswap V3 liquidity operations
-    struct OperationParams {
-        /// @notice The max slippage allowed when providing liquidity
-        uint16 maxMintSlippageRate;
-    }
-
-    error CallerNotPositionNFT(address caller);
-    error DuplicatedPosition(uint256 tokenId);
-    /// @dev This is a sanity check error. It means uniswap minted a token pair this contract does not support.
-    error MintedUnsupportedTokenPair();
-    error TokenPairIdNotSupported(uint8 tokenPairId);
-    error NotLiquidityOwner(address sender);
-    /// @dev This means current contract is not the owner of the position nft from uniswap
-    error PositionNFTNotReceived(uint256 tokenId);
-    error NotOwningPositionNFT(uint256 tokenId);
 
     /// @notice The owner of liquidity. This address has the permission to close positions
     address liquidityOwner;
     /// @notice The address of the position nft from uniswap
     address positionNFTAddress;
+    /// @notice The address that can rebalance the liquidity positions
+    address balancer;
     INonfungiblePositionManager public immutable nonfungiblePositionManager;
     /// @dev A util contract that checks the list of supported uniswap v3 token pairs
     IUniswapV3TokenPairs public immutable supportedTokenPairs;
@@ -55,25 +77,36 @@ contract UniswapV3LpHandler is IERC721Receiver {
     mapping(uint256 => Deposit) public deposits;
 
     /// @dev The list of configuration parameters for liquidity operations
-    OperationParams public params;
+    OperationParams public operationalParams;
 
     constructor(
         INonfungiblePositionManager _nonfungiblePositionManager,
         IUniswapV3TokenPairs _supportedTokenPairs,
         address _liquidityOwner,
+        address _balancer,
         address _positionNFTAddress
     ) {
         nonfungiblePositionManager = _nonfungiblePositionManager;
         supportedTokenPairs = _supportedTokenPairs;
         liquidityOwner = _liquidityOwner;
         positionNFTAddress = _positionNFTAddress;
+        balancer = _balancer;
 
         // max slippage is 3%
-        params.maxMintSlippageRate = 30;
+        operationalParams.maxMintSlippageRate = 30;
+        operationalParams.isCompoundFee = true;
     }
 
     modifier onlyLiquidityOwner() {
         if (msg.sender != liquidityOwner) {
+            revert NotLiquidityOwner(msg.sender);
+        }
+
+        _;
+    }
+
+    modifier onlyBalancer() {
+        if (msg.sender != balancer) {
             revert NotLiquidityOwner(msg.sender);
         }
 
@@ -98,6 +131,133 @@ contract UniswapV3LpHandler is IERC721Receiver {
         return this.onERC721Received.selector;
     }
 
+    function rebalance(RebalanceParams calldata _params) external {
+        uint256 amount0; uint256 amount1; uint8 tokenPairId;
+
+        {
+            uint256 fee0;
+            uint256 fee1;
+
+            (fee0, fee1, tokenPairId) = _collectAllFees(_params.tokenId);
+
+            (amount0, amount1, ) = _decreaseLiquidity(
+                _params.tokenId,
+                LibPercentageMath.percentage100(),
+                _params.amount0WithdrawMin,
+                _params.amount1WithdrawMin
+            );
+
+            if (operationalParams.isCompoundFee) {
+                amount0 += fee0;
+                amount1 += fee1;
+            }
+        }
+
+
+        // currently all the collected fees and tokens are held by this contract
+
+        // this step is tricky and loss can happen
+        _trySwap(amount0, amount1, _params.newAmount0, _params.newAmount1, _params.swapSlippage);
+
+        // now we should have all the tokens, perform open position
+        _mintNewPosition(tokenPairId, _params.newAmount1, _params.newAmount1, _params.tickLower, _params.tickUpper);
+    }
+
+    /// @notice Mints a new position in uniswap LP pool. Only the liquidity owner can trigger this function.
+    /// @param _tokenPairId The id of the token pair to mint in uniswap v3
+    /// @param _amount0 The amount of token0
+    /// @param _amount1 The amount of token1
+    /// @param _tickLower The lower price range
+    /// @param _tickUpper The upper price range
+    function mintNewPosition(
+        uint8 _tokenPairId,
+        uint256 _amount0,
+        uint256 _amount1,
+        int24 _tickLower,
+        int24 _tickUpper
+    ) external onlyLiquidityOwner {
+        _mintNewPosition(_tokenPairId, _amount0, _amount1, _tickLower, _tickUpper);
+    }
+
+    /// @notice Collects the fees associated with provided liquidity
+    /// @dev The contract must hold the erc721 token before it can collect fees
+    /// @param _tokenId The id of the erc721 token
+    function collectAllFees(uint256 _tokenId) external onlyLiquidityOwner {
+        (uint256 amount0, uint256 amount1, uint8 tokenPairId) = _collectAllFees(_tokenId);
+
+        // now send collected fees back to owner
+        TokenPair memory tokenPair = supportedTokenPairs.getTokenPair(
+            tokenPairId
+        );
+
+        // TODO: charge some fee for the protocol
+        _sendTo(msg.sender, tokenPair.token0, amount0);
+        _sendTo(msg.sender, tokenPair.token1, amount1);
+    }
+
+    /// @notice A function that decreases the current liquidity by the target percentage.
+    function decreaseLiquidity(
+        uint256 _tokenId,
+        uint16 _percentage,
+        uint256 _amount0Min,
+        uint256 _amount1Min
+    ) external onlyLiquidityOwner {
+        (uint256 amount0, uint256 amount1, uint8 tokenPairId) = _decreaseLiquidity(_tokenId, _percentage, _amount0Min, _amount1Min);
+
+        (address token0, address token1) = supportedTokenPairs.getTokenPairAddresses(tokenPairId);
+        _sendTo(msg.sender, token0, amount0);
+        _sendTo(msg.sender, token1, amount1);
+    }
+
+    /// @notice Increases liquidity in the range of the nft
+    /// @dev Pool must be initialized already to add liquidity
+    function increaseLiquidity(
+        uint256 _tokenId,
+        uint256 _amountAdd0,
+        uint256 _amountAdd1
+    ) external onlyLiquidityOwner {
+        _increaseLiquidity(_tokenId, _amountAdd0, _amountAdd1);
+    }
+
+    function _trySwap(uint256 _reserve0, uint256 _reserve1, uint256 _target0, uint256 _target1, uint16 _slippage) internal {
+        if (_reserve0 >= _target0 && _reserve1 >= _target0) {
+            // no need swap
+            return;
+        }
+
+        if (_reserve0 > _target0 && _reserve1 < _target1) {
+            // TODO: need to swap max (_reserve0 - _target0) for at least (_target1 - _reserve1) within slippage
+            return;
+        }
+
+        if (_reserve0 < _target0 && _reserve1 > _target1) {
+            // TODO: need to swap max (_reserve1 - _target1) for at least (_target0 - _reserve0) within slippage
+            return;
+        }
+
+        revert NotSwapable(_reserve0, _reserve1, _target0, _target1);
+    }
+
+    function _collectAllFees(uint256 _tokenId) internal returns(uint256 amount0, uint256 amount1, uint8 tokenPairId) {
+        tokenPairId = _ensureOwningNFT(_tokenId);
+
+        // set amount0Max and amount1Max to uint256.max to collect all fees
+        // alternatively can set recipient to msg.sender and avoid another transaction in `sendToOwner`
+        CollectParams memory collectParams = CollectParams({
+            tokenId: _tokenId,
+            recipient: address(this),
+            amount0Max: type(uint128).max,
+            amount1Max: type(uint128).max
+        });
+
+        (amount0, amount1) = nonfungiblePositionManager.collect(
+            collectParams
+        );
+
+        deposits[_tokenId].fee0 += amount0;
+        deposits[_tokenId].fee1 += amount1;
+    }
+
     function _createDeposit(uint256 _tokenId) internal {
         // sanity check
         if (deposits[_tokenId].tokenPair.isValidTokenPairId()) {
@@ -120,23 +280,19 @@ contract UniswapV3LpHandler is IERC721Receiver {
         // operator is msg.sender
         deposits[_tokenId] = Deposit({
             tokenPair: tokenPairId,
-            liquidity: liquidity
+            liquidity: liquidity,
+            fee0: 0,
+            fee1: 0
         });
     }
 
-    /// @notice Mints a new position in uniswap LP pool. Only the liquidity owner can trigger this function.
-    /// @param _tokenPairId The id of the token pair to mint in uniswap v3
-    /// @param _amount0 The amount of token0
-    /// @param _amount1 The amount of token1
-    /// @param _tickLower The lower price range
-    /// @param _tickUpper The upper price range
-    function mintNewPosition(
+    function _mintNewPosition(
         uint8 _tokenPairId,
         uint256 _amount0,
         uint256 _amount1,
         int24 _tickLower,
         int24 _tickUpper
-    ) external onlyLiquidityOwner {
+    ) internal {
         TokenPair memory tokenPair = supportedTokenPairs.getTokenPair(
             _tokenPairId
         );
@@ -149,7 +305,7 @@ contract UniswapV3LpHandler is IERC721Receiver {
         _transferFundsAndApprove(tokenPair.token0, _amount0);
         _transferFundsAndApprove(tokenPair.token1, _amount1);
 
-        uint16 maxMintSlippageRate = params.maxMintSlippageRate;
+        uint16 maxMintSlippageRate = operationalParams.maxMintSlippageRate;
 
         MintParams memory mintParams = MintParams({
             token0: tokenPair.token0,
@@ -180,41 +336,57 @@ contract UniswapV3LpHandler is IERC721Receiver {
         _ensureNFTReceived(tokenId);
     }
 
-    /// @notice Collects the fees associated with provided liquidity
-    /// @dev The contract must hold the erc721 token before it can collect fees
-    /// @param _tokenId The id of the erc721 token
-    function collectAllFees(uint256 _tokenId) external onlyLiquidityOwner {
+    function _increaseLiquidity(
+        uint256 _tokenId,
+        uint256 _amountAdd0,
+        uint256 _amountAdd1
+    ) internal {
         uint8 tokenPairId = _ensureOwningNFT(_tokenId);
+        (address token0, address token1) = supportedTokenPairs
+            .getTokenPairAddresses(tokenPairId);
 
-        // set amount0Max and amount1Max to uint256.max to collect all fees
-        // alternatively can set recipient to msg.sender and avoid another transaction in `sendToOwner`
-        CollectParams memory collectParams = CollectParams({
+        _transferFundsAndApprove(token0, _amountAdd0);
+        _transferFundsAndApprove(token1, _amountAdd1);
+
+        uint16 maxMintSlippageRate = operationalParams.maxMintSlippageRate;
+
+        IncreaseLiquidityParams
+            memory increaseParams = IncreaseLiquidityParams({
                 tokenId: _tokenId,
-                recipient: address(this),
-                amount0Max: type(uint128).max,
-                amount1Max: type(uint128).max
+                amount0Desired: _amountAdd0,
+                amount1Desired: _amountAdd1,
+                amount0Min: _amountAdd0 -
+                    LibPercentageMath.multiply(
+                        _amountAdd0,
+                        maxMintSlippageRate
+                    ),
+                amount1Min: _amountAdd1 -
+                    LibPercentageMath.multiply(
+                        _amountAdd1,
+                        maxMintSlippageRate
+                    ),
+                deadline: block.timestamp
             });
 
-        (uint256 amount0, uint256 amount1) = nonfungiblePositionManager.collect(collectParams);
+        (
+            uint128 liquidity,
+            uint256 amount0Minted,
+            uint256 amount1Minted
+        ) = nonfungiblePositionManager.increaseLiquidity(increaseParams);
 
-        // now send collected fees back to owner
-        TokenPair memory tokenPair = supportedTokenPairs.getTokenPair(
-            tokenPairId
-        );
+        _refund(token0, _amountAdd0, amount0Minted);
+        _refund(token1, _amountAdd1, amount1Minted);
 
-        // TODO: charge some fee for the protocol
-        _sendTo(msg.sender, tokenPair.token0, amount0);
-        _sendTo(msg.sender, tokenPair.token1, amount1);
+        _updateNFTLiquidity(_tokenId, liquidity);
     }
 
-    /// @notice A function that decreases the current liquidity by the target percentage.
-    function decreaseLiquidity(
+    function _decreaseLiquidity(
         uint256 _tokenId,
         uint16 _percentage,
         uint256 _amount0Min,
         uint256 _amount1Min
-    ) external onlyLiquidityOwner {
-        uint8 tokenPairId = _ensureOwningNFT(_tokenId);
+    ) internal returns(uint256 amount0, uint256 amount1, uint8 tokenPairId) {
+        tokenPairId = _ensureOwningNFT(_tokenId);
 
         uint128 newLiquidity = LibPercentageMath.multiplyU128(
             deposits[_tokenId].liquidity,
@@ -225,71 +397,25 @@ contract UniswapV3LpHandler is IERC721Receiver {
         // if the amount received after burning is not greater than these minimums, transaction will fail
         DecreaseLiquidityParams
             memory decreaseParams = DecreaseLiquidityParams({
-                    tokenId: _tokenId,
-                    liquidity: newLiquidity,
-                    amount0Min: _amount0Min,
-                    amount1Min: _amount1Min,
-                    deadline: block.timestamp
-                });
+                tokenId: _tokenId,
+                liquidity: newLiquidity,
+                amount0Min: _amount0Min,
+                amount1Min: _amount1Min,
+                deadline: block.timestamp
+            });
 
-        (uint256 amount0, uint256 amount1) = nonfungiblePositionManager
+        (amount0, amount1) = nonfungiblePositionManager
             .decreaseLiquidity(decreaseParams);
 
-        (,  ,newLiquidity) = nonfungiblePositionManager.positionSummary(_tokenId);
+        (, , newLiquidity) = nonfungiblePositionManager.positionSummary(
+            _tokenId
+        );
 
         if (newLiquidity == 0) {
             delete deposits[_tokenId];
         } else {
             _updateNFTLiquidity(_tokenId, newLiquidity);
         }
-
-        (address token0, address token1) = supportedTokenPairs
-            .getTokenPairAddresses(tokenPairId);
-        _sendTo(msg.sender, token0, amount0);
-        _sendTo(msg.sender, token1, amount1);
-    }
-
-    /// @notice Increases liquidity in the range of the nft
-    /// @dev Pool must be initialized already to add liquidity
-    function increaseLiquidity(
-        uint256 _tokenId,
-        uint256 _amountAdd0,
-        uint256 _amountAdd1
-    ) external onlyLiquidityOwner {
-        uint8 tokenPairId = _ensureOwningNFT(_tokenId);
-        (address token0, address token1) = supportedTokenPairs
-            .getTokenPairAddresses(tokenPairId);
-
-        _transferFundsAndApprove(token0, _amountAdd0);
-        _transferFundsAndApprove(token1, _amountAdd1);
-
-        uint16 maxMintSlippageRate = params.maxMintSlippageRate;
-
-        IncreaseLiquidityParams
-            memory increaseParams = IncreaseLiquidityParams({
-                    tokenId: _tokenId,
-                    amount0Desired: _amountAdd0,
-                    amount1Desired: _amountAdd1,
-                    amount0Min: _amountAdd0 -
-                        LibPercentageMath.multiply(
-                            _amountAdd0,
-                            maxMintSlippageRate
-                        ),
-                    amount1Min: _amountAdd1 -
-                        LibPercentageMath.multiply(
-                            _amountAdd1,
-                            maxMintSlippageRate
-                        ),
-                    deadline: block.timestamp
-                });
-
-        (uint128 liquidity, uint256 amount0Minted, uint256 amount1Minted) = nonfungiblePositionManager
-            .increaseLiquidity(increaseParams);
-
-        _refund(token0, _amountAdd0, amount0Minted);
-        _refund(token1, _amountAdd1, amount1Minted);
-
-        _updateNFTLiquidity(_tokenId, liquidity);
     }
 
     function _updateNFTLiquidity(

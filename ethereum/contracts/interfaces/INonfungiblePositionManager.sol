@@ -123,14 +123,7 @@ interface INonfungiblePositionManager {
     /// @return liquidity The liquidity of the position
     function positionSummary(
         uint256 tokenId
-    )
-        external
-        view
-        returns (
-            address token0,
-            address token1,
-            uint128 liquidity
-        );
+    ) external view returns (address token0, address token1, uint128 liquidity);
 
     /// @notice Creates a new position wrapped in a NFT
     /// @dev Call this when the pool does exist and is initialized. Note that if the pool is created but not initialized
