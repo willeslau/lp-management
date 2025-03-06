@@ -8,13 +8,13 @@ import {IQuoterV2} from '@uniswap/v3-periphery/contracts/interfaces/IQuoterV2.so
 import {FullMath} from "@uniswap/v3-core/contracts/libraries/FullMath.sol";
 
 contract LiquiditySwapV3 is ILiquiditySwapV3 {
-    uint256 constant Q192 = 6277101735386680763835789423207666416102355444464034512896;
+    uint256 constant Q96 = 2**96;
 
     IQuoterV2 public quoter;
 
     /**
      * @notice Computes the Uniswap V3 ratio R in Q96 form
-     *         R = (1/sqrtP - 1/sqrtPb) / (sqrtP - sqrtPa).
+     *         R = (sqrtP - sqrtPa) / (1/sqrtP - 1/sqrtPb).
      * @param sqrtP_Q96   current sqrt-price in Q96
      * @param sqrtPa_Q96  lower bound sqrt-price in Q96
      * @param sqrtPb_Q96  upper bound sqrt-price in Q96
@@ -25,15 +25,17 @@ contract LiquiditySwapV3 is ILiquiditySwapV3 {
         uint160 sqrtPa_Q96,
         uint160 sqrtPb_Q96
     ) public pure returns (uint256) {
-        if (!(sqrtPa_Q96 <= sqrtP_Q96 && sqrtP_Q96 < sqrtPb_Q96)) {
+        if (!(sqrtPa_Q96 <= sqrtP_Q96 && sqrtP_Q96 <= sqrtPb_Q96)) {
             revert("invalid range");
         }
 
-        // numerator_Q96 = (1/sqrtP - 1/sqrtPb) in Q96
-        uint256 numerator_Q96 =  _divQ96(Q192, sqrtP_Q96) - _divQ96(Q192, sqrtPb_Q96);
+        // denominator_Q96 = (1/sqrtP - 1/sqrtPb) in Q96
+        //               = (sqrtPb - sqrtP) / (sqrtPb * sqrtP)
+        uint256 denominator_Q96 =  _divQ96(sqrtPb_Q96 - sqrtP_Q96, sqrtPb_Q96);
+        denominator_Q96 =  _divQ96(denominator_Q96, sqrtP_Q96);
 
-        // R_Q96 = (numerator_Q96 / (sqrtP_Q96 - sqrtPa_Q96)) in Q96
-        return _divQ96(numerator_Q96, sqrtP_Q96 - sqrtPa_Q96);
+        // R_Q96 = (sqrtP_Q96 - sqrtPa_Q96) / denominator_Q96 in Q96
+        return _divQ96(sqrtP_Q96 - sqrtPa_Q96, denominator_Q96);
     }
 
     function calSwapToken1ForToken0(
@@ -138,7 +140,7 @@ contract LiquiditySwapV3 is ILiquiditySwapV3 {
     }
 
     function _divQ96(uint256 a, uint256 b) internal pure returns(uint256) {
-        return FullMath.mulDiv(a, Q192, b);
+        return FullMath.mulDiv(a, Q96, b);
     }
 
     function _absSub(uint256 a, uint256 b) internal pure returns(uint256) {
