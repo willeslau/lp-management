@@ -7,6 +7,12 @@ import {IUniswapV3Pool} from '@uniswap/v3-core/contracts/interfaces/IUniswapV3Po
 import {IQuoterV2} from '@uniswap/v3-periphery/contracts/interfaces/IQuoterV2.sol';
 import {FullMath} from "@uniswap/v3-core/contracts/libraries/FullMath.sol";
 
+enum CompareResult {
+    InRange,
+    AboveRange,
+    BelowRange
+}
+
 contract LiquiditySwapV3 is ILiquiditySwapV3 {
     uint256 constant Q96 = 2**96;
 
@@ -47,12 +53,17 @@ contract LiquiditySwapV3 is ILiquiditySwapV3 {
         for (uint8 i = 0; i < _searchRange.searchLoopNum;) {
             mid = low + (hig - low) / 2;
 
-            (bool isOk, uint256 amountOut) = _swapToken1ForToken0AgainstR(_params, mid);
+            (CompareResult r, uint256 amountOut) = _swapToken1ForToken0AgainstR(_params, mid);
             
-            if (isOk) {
+            if (r == CompareResult.InRange) {
                 // found the solution
                 return (true, mid, amountOut);
+            } else if (r == CompareResult.AboveRange) {
+                mid = low + 1 ether; 
+            } else {
+                mid = hig - 1 ether;
             }
+
             unchecked {
                 i++;
             }
@@ -74,12 +85,17 @@ contract LiquiditySwapV3 is ILiquiditySwapV3 {
         for (uint8 i = 0; i < _searchRange.searchLoopNum;) {
             mid = low + (hig - low) / 2;
 
-            (bool isOk, uint256 amountOut) = _swapToken0ForToken1AgainstR(_params, mid);
+            (CompareResult r, uint256 amountOut) = _swapToken0ForToken1AgainstR(_params, mid);
             
-            if (isOk) {
+            if (r == CompareResult.InRange) {
                 // found the solution
                 return (true, mid, amountOut);
+            } else if (r == CompareResult.AboveRange) {
+                mid = hig - 1 ether; 
+            } else {
+                mid = low + 1 ether;
             }
+
             unchecked {
                 i++;
             }
@@ -92,7 +108,7 @@ contract LiquiditySwapV3 is ILiquiditySwapV3 {
     function _swapToken0ForToken1AgainstR(
         CalculateParams memory _params,
         uint256 _delta0
-    ) internal returns(bool isOk, uint256 amount1Out) {
+    ) internal returns(CompareResult, uint256 amount1Out) {
         (amount1Out, , ,) = quoter.quoteExactInputSingle(IQuoterV2.QuoteExactInputSingleParams({
             tokenIn: _params.token0,
             tokenOut: _params.token1,
@@ -102,7 +118,7 @@ contract LiquiditySwapV3 is ILiquiditySwapV3 {
         }));
 
         return (
-            _isPostSwapROk(_params.amount0 - _delta0, _params.amount1 + _delta0, _params.R_Q96, _params.REpslon_Q96), 
+            _isPostSwapROk(_params.amount0 - _delta0, _params.amount1 + amount1Out, _params.R_Q96, _params.REpslon_Q96), 
             amount1Out
         );
     }
@@ -110,7 +126,7 @@ contract LiquiditySwapV3 is ILiquiditySwapV3 {
     function _swapToken1ForToken0AgainstR(
         CalculateParams memory _params,
         uint256 _delta1
-    ) internal returns(bool isOk, uint256 amount0Out) {
+    ) internal returns(CompareResult, uint256 amount0Out) {
         (amount0Out, , ,) = quoter.quoteExactInputSingle(IQuoterV2.QuoteExactInputSingleParams({
             tokenIn: _params.token1,
             tokenOut: _params.token0,
@@ -125,23 +141,25 @@ contract LiquiditySwapV3 is ILiquiditySwapV3 {
         );
     }
 
-    function _isPostSwapROk(uint256 _newAmount0, uint256 _newAmount1, uint256 _R_Q96, uint256 _REpslon_Q96) internal pure returns (bool) {
-        uint256 r = _divQ96(_newAmount0, _newAmount1);
+    function _isPostSwapROk(uint256 _newAmount0, uint256 _newAmount1, uint256 _R_Q96, uint256 _REpslon_Q96) internal pure returns (CompareResult) {
+        uint256 r = _divQ96(_newAmount1 * Q96, _newAmount0 * Q96);
 
-        uint256 rDelta_Q96 = _divQ96(
-            _absSub(_R_Q96, r), 
-            _R_Q96
-        );
+        if (r < _R_Q96) {
+            uint256 rDelta_Q96 = _divQ96(_R_Q96 - r, _R_Q96);
+            if (rDelta_Q96 < _REpslon_Q96) {
+                return CompareResult.InRange;
+            }
+            return CompareResult.BelowRange;
+        }
 
-        return rDelta_Q96 < _REpslon_Q96;
+        uint256 rDelta_Q96 = _divQ96(r - _R_Q96, _R_Q96);
+        if (rDelta_Q96 < _REpslon_Q96) {
+            return CompareResult.InRange;
+        }
+        return CompareResult.AboveRange;
     }
 
     function _divQ96(uint256 a, uint256 b) internal pure returns(uint256) {
         return FullMath.mulDiv(a, Q96, b);
     }
-
-    function _absSub(uint256 a, uint256 b) internal pure returns(uint256) {
-        return a > b ? a - b : b - a;
-    }
-
 }
