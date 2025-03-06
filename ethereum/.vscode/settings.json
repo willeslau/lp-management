@@ -1,0 +1,9 @@
+{
+    "solidity.remappings": [
+        "@openzeppelin/=node_modules/@openzeppelin/",
+        "hardhat/=node_modules/hardhat/",
+        "@uniswap/=node_modules/@uniswap/"
+    ],
+    "solidity.compileUsingRemoteVersion": "latest",
+    "solidity.defaultCompiler": "remote"
+}
