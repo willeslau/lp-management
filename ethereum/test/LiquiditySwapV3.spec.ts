@@ -19,7 +19,7 @@ describe('LiquiditySwapV3', () => {
         const priceSqrtCur_Q96 = "4218481174524931107978693574656";
         const priceSqrtHig_Q96 = "4339505179874779672736325173248";
 
-        const expectedR_Q96 = 49869267033240137919016703274219n;
+        const expectedR_Q96 = 49869267033240137919016702592389n;
 
         const R_Q96 = await swapCalculator.computeR(priceSqrtCur_Q96, priceSqrtLow_Q96, priceSqrtHig_Q96);
         expect(R_Q96).to.be.eq(expectedR_Q96);

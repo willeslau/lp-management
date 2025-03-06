@@ -14,7 +14,9 @@ contract LiquiditySwapV3 is ILiquiditySwapV3 {
 
     /**
      * @notice Computes the Uniswap V3 ratio R in Q96 form
-     *         R = (sqrtP - sqrtPa) / (1/sqrtP - 1/sqrtPb).
+     *         R = (sqrtP - sqrtPa) / (1/sqrtP - 1/sqrtPb)
+     *         R = = (sqrtP - sqrtPa) / [(sqrtPb - sqrtP) / (sqrtPb * sqrtP)]
+     *         R = = (sqrtP - sqrtPa) * sqrtPb * sqrtP / (sqrtPb - sqrtP)
      * @param sqrtP_Q96   current sqrt-price in Q96
      * @param sqrtPa_Q96  lower bound sqrt-price in Q96
      * @param sqrtPb_Q96  upper bound sqrt-price in Q96
@@ -29,13 +31,8 @@ contract LiquiditySwapV3 is ILiquiditySwapV3 {
             revert("invalid range");
         }
 
-        // denominator_Q96 = (1/sqrtP - 1/sqrtPb) in Q96
-        //               = (sqrtPb - sqrtP) / (sqrtPb * sqrtP)
-        uint256 denominator_Q96 =  _divQ96(sqrtPb_Q96 - sqrtP_Q96, sqrtPb_Q96);
-        denominator_Q96 =  _divQ96(denominator_Q96, sqrtP_Q96);
-
-        // R_Q96 = (sqrtP_Q96 - sqrtPa_Q96) / denominator_Q96 in Q96
-        return _divQ96(sqrtP_Q96 - sqrtPa_Q96, denominator_Q96);
+        uint256 tmp = FullMath.mulDiv(sqrtP_Q96, sqrtPb_Q96, Q96);
+        return FullMath.mulDiv(sqrtP_Q96 - sqrtPa_Q96, tmp, sqrtPb_Q96 - sqrtP_Q96);
     }
 
     function calSwapToken1ForToken0(
