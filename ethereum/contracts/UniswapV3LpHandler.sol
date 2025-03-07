@@ -12,7 +12,6 @@ import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV
 import {IUniswapV3SwapCallback} from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
 import {INonfungiblePositionManager, MintParams, IncreaseLiquidityParams, CollectParams, DecreaseLiquidityParams} from "./interfaces/INonfungiblePositionManager.sol";
 import {LibPercentageMath} from "./RateMath.sol";
-import {ISwapHandler} from "./interfaces/ISwapHandler.sol";
 
 /// @notice Represents the deposit of an NFT
 struct Deposit {
@@ -99,7 +98,7 @@ contract UniswapV3LpHandler is IERC721Receiver, IUniswapV3SwapCallback {
     INonfungiblePositionManager public immutable nonfungiblePositionManager;
     /// @dev A util contract that checks the list of supported uniswap v3 token pairs
     IUniswapV3TokenPairs public immutable supportedTokenPairs;
-    address public immutable swap;
+    address public immutable swapFactory;
 
     /// @dev deposits[tokenId] => Deposit
     mapping(uint256 => Deposit) public deposits;
@@ -113,14 +112,14 @@ contract UniswapV3LpHandler is IERC721Receiver, IUniswapV3SwapCallback {
         address _liquidityOwner,
         address _balancer,
         address _positionNFTAddress,
-        address _swap
+        address _swapFactory
     ) {
         nonfungiblePositionManager = _nonfungiblePositionManager;
         supportedTokenPairs = _supportedTokenPairs;
         liquidityOwner = _liquidityOwner;
         positionNFTAddress = _positionNFTAddress;
         balancer = _balancer;
-        swap = _swap;
+        swapFactory = _swapFactory;
 
         // max slippage is 3%
         operationalParams.maxMintSlippageRate = 30;
@@ -386,8 +385,6 @@ contract UniswapV3LpHandler is IERC721Receiver, IUniswapV3SwapCallback {
         uint256 amountOutMinimum,
         bool isToken0ToToken1
     ) internal {
-        address tokenIn = isToken0ToToken1 ? tokenPair.token0 : tokenPair.token1;
-        IERC20(tokenIn).safeIncreaseAllowance(swap, amountIn);
         _swapByPool(
             tokenPair,
             amountIn,
@@ -415,7 +412,7 @@ contract UniswapV3LpHandler is IERC721Receiver, IUniswapV3SwapCallback {
             ? tokenPair.token1
             : tokenPair.token0;
 
-        address pool = IUniswapV3Factory(swap).getPool(
+        address pool = IUniswapV3Factory(swapFactory).getPool(
             tokenPair.token0,
             tokenPair.token1,
             tokenPair.poolFee
@@ -458,7 +455,7 @@ contract UniswapV3LpHandler is IERC721Receiver, IUniswapV3SwapCallback {
             (address, address, uint24)
         );
 
-        address pool = IUniswapV3Factory(swap).getPool(tokenIn, tokenOut, poolFee);
+        address pool = IUniswapV3Factory(swapFactory).getPool(tokenIn, tokenOut, poolFee);
         if (msg.sender != pool) {
             revert InvalidPool();
         }

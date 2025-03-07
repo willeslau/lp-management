@@ -179,7 +179,7 @@ describe("UniswapV3LpHandler", () => {
       expect(await lpHandler.supportedTokenPairs()).to.equal(
         await supportedTokenPairs.getAddress()
       );
-      expect(await lpHandler.swap()).to.equal(await mockSwap.getAddress());
+      expect(await lpHandler.swapFactory()).to.equal(await mockSwap.getAddress());
 
       // Check initial operational parameters
       const params = await lpHandler.operationalParams();

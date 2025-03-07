@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 import "../interfaces/IUniswapV3TokenPairs.sol";
-import "../interfaces/ISwapHandler.sol";
 
 contract MockUniswapV3TokenPairs is IUniswapV3TokenPairs {
     mapping(uint256 => TokenPair) private _tokenPairs;

@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interfaces/ISwapHandler.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract MockUniswapV3Pool is ISwapHandler {
+contract MockUniswapV3Pool {
     using SafeERC20 for IERC20;
 
     address public token0;
@@ -49,28 +48,28 @@ contract MockUniswapV3Pool is ISwapHandler {
         swapResult = _result;
     }
 
-    function slot0() external view returns (uint160, int24, uint16, uint16, uint16, uint8, bool) {
+    function slot0()
+        external
+        view
+        returns (uint160, int24, uint16, uint16, uint16, uint8, bool)
+    {
         return (sqrtPriceX96, tick, 0, 0, 0, 0, false);
     }
 
+    function getPool(address, address, uint24) external view returns (address pool) {
+        return address(this);
+    }
+
     function swap(
-        TokenPair memory tokenPair,
-        uint256 amountIn,
-        uint256 amountOutMinimum,
-        bool isToken0ToToken1
-    ) external returns (uint256 amountOut) {
+        address recipient,
+        bool zeroForOne,
+        int256 amountSpecified,
+        uint160 sqrtPriceLimitX96,
+        bytes calldata data
+    ) external returns (int256 amount0, int256 amount1) {
         swapCalled = true;
-        
-        // Simulate token transfer
-        address tokenIn = isToken0ToToken1 ? tokenPair.token0 : tokenPair.token1;
-        address tokenOut = isToken0ToToken1 ? tokenPair.token1 : tokenPair.token0;
-        
-        // Transfer tokens from sender to this contract
-        IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
-        
-        // Transfer output tokens to sender
-        IERC20(tokenOut).transfer(msg.sender, swapResult);
-        
-        return swapResult;
+
+        amount0 = amountSpecified;
+        amount1 = amountSpecified;
     }
 }
