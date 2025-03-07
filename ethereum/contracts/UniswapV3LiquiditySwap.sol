@@ -89,14 +89,14 @@ contract LiquiditySwapV3 is ILiquiditySwapV3 {
             amount0In = low + (hig - low) / 2;
 
             (r, amount1Out) = _swapToken0ForToken1AgainstR(_params, _searchRange, amount0In);
-            
+
             if (r == CompareResult.InRange) {
                 // found the solution
                 return (true, amount0In, amount1Out);
             } else if (r == CompareResult.AboveRange) {
-                hig = amount0In - 1 ether; 
+                hig = amount0In - 1 wei; 
             } else {
-                low = amount0In + 1 ether;
+                low = amount0In + 1 wei;
             }
 
             unchecked {

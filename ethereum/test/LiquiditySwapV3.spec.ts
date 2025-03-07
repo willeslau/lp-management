@@ -35,7 +35,7 @@ describe('LiquiditySwapV3', () => {
     it('swap token 1 for 0 works R correctly', async () => {
         const liquidity = "1409862032491040733326409";
         const pCurrent = "4551194197074107514614710272";
-        await quoter.setParams(pCurrent, liquidity);
+        await quoter.setParams(pCurrent, liquidity, false);
 
         // token 1 is eth, token 0 is uniswap
         await expect(
@@ -59,5 +59,34 @@ describe('LiquiditySwapV3', () => {
             )
         )
         .to.emit(swapCalculatorSwapTester, 'CalculatedTokenSwap').withArgs(3571515538282492507250n, 11787109375000000000n);
+    });
+
+    it('swap token 0 for 1 works R correctly', async () => {
+        const liquidity = "1409862032491040733326409";
+        const pCurrent = "4551194197074107514614710272";
+        await quoter.setParams(pCurrent, liquidity, true);
+
+        // token 1 is eth, token 0 is uniswap
+        await expect(
+            swapCalculatorSwapTester.calSwapToken0ForToken1(
+                {
+                    poolFee: 0, // not important
+                    token0: ZERO_ADDRESS,
+                    token1: ONE_ADDRESS,
+                    amount0: ethers.parseEther("1000"),
+                    amount1: ethers.parseEther("0.5"),
+                    sqrtP_Q96: pCurrent,
+                    sqrtPSlippage_Q96: 0, // not important
+                    R_Q96: "142246744265321288118042624"
+                },
+                {
+                    swapInLow: ethers.parseEther("0"),
+                    swapInHigh: ethers.parseEther("1000"),
+                    searchLoopNum: 20,
+                    REpslon_Q96: "79228162514264339242811392",
+                }
+            )
+        )
+        .to.emit(swapCalculatorSwapTester, 'CalculatedTokenSwap').withArgs(254394531249999999999n, 839450005002466943n);
     });
 });

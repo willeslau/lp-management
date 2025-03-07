@@ -24,4 +24,16 @@ contract UniswapV3LiquiditySwapTest {
         }
         return;
     }
+
+    function calSwapToken0ForToken1(
+        CalculateParams memory _params,
+        SearchRange calldata _searchRange
+    ) external {
+        (bool isOk, uint256 amount0In, uint256 amountOut) = calculator.calSwapToken0ForToken1(_params, _searchRange);
+
+        if (isOk) {
+            emit CalculatedTokenSwap(amount0In, amountOut);
+        }
+        return;
+    }
 }

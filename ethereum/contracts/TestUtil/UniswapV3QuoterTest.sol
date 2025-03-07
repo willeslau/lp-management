@@ -3,16 +3,19 @@ pragma solidity ^0.8.0;
 
 import {IQuoterV2} from '@uniswap/v3-periphery/contracts/interfaces/IQuoterV2.sol';
 import {FullMath} from "@uniswap/v3-core/contracts/libraries/FullMath.sol";
+import {SqrtPriceMath} from "@uniswap/v3-core/contracts/libraries/SqrtPriceMath.sol";
 
 contract UniswapV3QuoterTest is IQuoterV2 {
     uint256 constant Q96 = 2**96;
 
     uint256 public pCurrentSqrt_Q96;
     uint256 public liquidity;
+    bool public zeroForOne;
 
-    function setParams(uint256 _pCurrentSqrt_Q96, uint256 _liquidity) external {
+    function setParams(uint256 _pCurrentSqrt_Q96, uint256 _liquidity, bool _zeroForOne) external {
         pCurrentSqrt_Q96 = _pCurrentSqrt_Q96;
         liquidity = _liquidity;
+        zeroForOne = _zeroForOne;
     }
 
     function quoteExactInput(bytes memory , uint256 )
@@ -35,10 +38,11 @@ contract UniswapV3QuoterTest is IQuoterV2 {
             uint32 ,
             uint256 
         ) {
-            // swap token 1 for token 0
-            if (_params.tokenOut == address(0)) {
-                uint256 t = FullMath.mulDiv(_params.amountIn, Q96, liquidity);
-                t += pCurrentSqrt_Q96;
+            if (zeroForOne) {
+                uint160 nextPrice_Q96 = SqrtPriceMath.getNextSqrtPriceFromInput(uint160(pCurrentSqrt_Q96), uint128(liquidity), _params.amountIn, true);
+                amountOut = SqrtPriceMath.getAmount1Delta(uint160(nextPrice_Q96), uint160(pCurrentSqrt_Q96), uint128(liquidity), false);
+            } else {
+                uint256 t = FullMath.mulDiv(_params.amountIn, Q96, liquidity) + pCurrentSqrt_Q96;
                 t = FullMath.mulDiv(t, pCurrentSqrt_Q96, Q96);
                 amountOut = FullMath.mulDiv(_params.amountIn, Q96, t);
             }
