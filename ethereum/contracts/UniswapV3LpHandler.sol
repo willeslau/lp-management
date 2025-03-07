@@ -9,6 +9,7 @@ import {IUniswapV3TokenPairs, TokenPair, LibTokenId} from "./interfaces/IUniswap
 import {ISwapRouter} from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
+import {IUniswapV3SwapCallback} from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
 import {INonfungiblePositionManager, MintParams, IncreaseLiquidityParams, CollectParams, DecreaseLiquidityParams} from "./interfaces/INonfungiblePositionManager.sol";
 import {LibPercentageMath} from "./RateMath.sol";
 import {ISwapHandler} from "./interfaces/ISwapHandler.sol";
@@ -48,7 +49,7 @@ struct RebalanceParams {
     int24 tickUpper;
 }
 
-contract UniswapV3LpHandler is IERC721Receiver {
+contract UniswapV3LpHandler is IERC721Receiver, IUniswapV3SwapCallback {
     using LibTokenId for uint8;
     using SafeERC20 for IERC20;
 
@@ -87,6 +88,7 @@ contract UniswapV3LpHandler is IERC721Receiver {
     error InvalidPool();
     error PoolNotExist();
     error InsufficientOutputAmount();
+    error UnsupportedTokenPair();
 
     /// @notice The owner of liquidity. This address has the permission to close positions
     address liquidityOwner;
@@ -161,6 +163,17 @@ contract UniswapV3LpHandler is IERC721Receiver {
         operationalParams.protocolFeeRate = _newRate;
     }
 
+    function setMaxMintSlippageRate(uint16 newRate) external onlyBalancer {
+        if (newRate > 1000) {
+            revert RateTooHigh(newRate);
+        }
+        operationalParams.maxMintSlippageRate = newRate;
+    }
+
+    function setCompoundFee(bool compound) external onlyLiquidityOwner {
+        operationalParams.isCompoundFee = compound;
+    }
+
     // Implementing `onERC721Received` so this contract can receive custody of erc721 tokens
     function onERC721Received(
         address,
@@ -180,6 +193,9 @@ contract UniswapV3LpHandler is IERC721Receiver {
     }
 
     function rebalance(RebalanceParams calldata _params) external onlyBalancer {
+        // First validate tick range
+        _validateTickRange(_params.tickLower, _params.tickUpper);
+
         uint256 amount0;
         uint256 amount1;
         uint8 tokenPairId;
@@ -187,7 +203,6 @@ contract UniswapV3LpHandler is IERC721Receiver {
         {
             uint256 fee0;
             uint256 fee1;
-
             (fee0, fee1, tokenPairId) = _collectAllFees(_params.tokenId);
 
             (amount0, amount1, ) = _decreaseLiquidity(
@@ -218,7 +233,7 @@ contract UniswapV3LpHandler is IERC721Receiver {
         // now we should have all the tokens, perform open position
         _mintNewPosition(
             tokenPairId,
-            _params.newAmount1,
+            _params.newAmount0,
             _params.newAmount1,
             _params.tickLower,
             _params.tickUpper
@@ -371,12 +386,87 @@ contract UniswapV3LpHandler is IERC721Receiver {
         uint256 amountOutMinimum,
         bool isToken0ToToken1
     ) internal {
-        ISwapHandler(swap).swap(
+        address tokenIn = isToken0ToToken1 ? tokenPair.token0 : tokenPair.token1;
+        IERC20(tokenIn).safeIncreaseAllowance(swap, amountIn);
+        _swapByPool(
             tokenPair,
             amountIn,
             amountOutMinimum,
             isToken0ToToken1
         );
+    }
+
+    /// @notice Swap tokens directly using UniswapV3Pool
+    /// @param tokenPair Token pair information
+    /// @param amountIn Input token amount
+    /// @param amountOutMinimum Minimum output token amount
+    /// @param isToken0ToToken1 Swap direction
+    /// @return amountOut Actual output token amount
+    function _swapByPool(
+        TokenPair memory tokenPair,
+        uint256 amountIn,
+        uint256 amountOutMinimum,
+        bool isToken0ToToken1
+    ) internal returns (uint256 amountOut) {
+        address tokenIn = isToken0ToToken1
+            ? tokenPair.token0
+            : tokenPair.token1;
+        address tokenOut = isToken0ToToken1
+            ? tokenPair.token1
+            : tokenPair.token0;
+
+        address pool = IUniswapV3Factory(swap).getPool(
+            tokenPair.token0,
+            tokenPair.token1,
+            tokenPair.poolFee
+        );
+        if (pool == address(0)) {
+            revert PoolNotExist();
+        }
+
+        _approveIfNeeded(tokenIn, pool, amountIn);
+
+        uint160 sqrtPriceLimitX96 = 0;
+
+        bytes memory callbackData = abi.encode(
+            tokenIn,
+            tokenOut,
+            tokenPair.poolFee
+        );
+
+        (int256 amount0, int256 amount1) = IUniswapV3Pool(pool).swap(
+            address(this),
+            isToken0ToToken1,
+            int256(amountIn),
+            sqrtPriceLimitX96,
+            callbackData
+        );
+
+        amountOut = uint256(-(isToken0ToToken1 ? amount1 : amount0));
+        if (amountOut < amountOutMinimum) {
+            revert InsufficientOutputAmount();
+        }
+    }
+
+    function uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    ) external override {
+        (address tokenIn, address tokenOut, uint24 poolFee) = abi.decode(
+            data,
+            (address, address, uint24)
+        );
+
+        address pool = IUniswapV3Factory(swap).getPool(tokenIn, tokenOut, poolFee);
+        if (msg.sender != pool) {
+            revert InvalidPool();
+        }
+        
+        uint8 tokenPairId = supportedTokenPairs.getTokenPairId(tokenIn, tokenOut);
+        if (!supportedTokenPairs.isSupportTokenPair(tokenPairId)) {
+            revert UnsupportedTokenPair();
+        }
     }
 
     function _collectAllFees(
@@ -488,11 +578,20 @@ contract UniswapV3LpHandler is IERC721Receiver {
         _refund(tokenPair.token0, _amount0, amount0Minted);
         _refund(tokenPair.token1, _amount1, amount1Minted);
 
+        // Create deposit record before checking NFT ownership
+        deposits[tokenId] = Deposit({
+            tokenPair: _tokenPairId,
+            liquidity: 0,
+            fee0: 0,
+            fee1: 0
+        });
+
         _ensureNFTReceived(tokenId);
 
         (, , uint128 liquidity) = nonfungiblePositionManager.positionSummary(
             tokenId
         );
+        deposits[tokenId].liquidity = liquidity;
         emit PositionCreated(tokenId, _tokenPairId, liquidity);
     }
 
@@ -548,6 +647,9 @@ contract UniswapV3LpHandler is IERC721Receiver {
     ) internal returns (uint256 amount0, uint256 amount1, uint8 tokenPairId) {
         tokenPairId = _ensureOwningNFT(_tokenId);
 
+        if (_percentage > 1000) {
+            revert RateTooHigh(_percentage);
+        }
         uint128 newLiquidity = LibPercentageMath.multiplyU128(
             deposits[_tokenId].liquidity,
             _percentage
@@ -579,11 +681,8 @@ contract UniswapV3LpHandler is IERC721Receiver {
         }
     }
 
-    function _updateNFTLiquidity(
-        uint256 _tokenId,
-        uint128 _liquidity
-    ) internal {
-        deposits[_tokenId].liquidity = _liquidity;
+    function _updateNFTLiquidity(uint256 _tokenId, uint128 _addLiquidity) internal {
+        deposits[_tokenId].liquidity += _addLiquidity;
     }
 
     /// @notice Transfers funds to owner of NFT
