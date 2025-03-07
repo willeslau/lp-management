@@ -5,6 +5,7 @@ struct SearchRange {
     uint256 swapInLow;
     uint256 swapInHigh;
     uint8 searchLoopNum;
+    uint160 REpslon_Q96;
 }
 
 struct CalculateParams {
@@ -16,7 +17,6 @@ struct CalculateParams {
     uint160 sqrtP_Q96;
     uint160 sqrtPSlippage_Q96;
     uint160 R_Q96;
-    uint160 REpslon_Q96;
 }
 
 /// @notice The utility contract to calculate how much tokens to swap for a liquidity pool

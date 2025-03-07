@@ -2,9 +2,9 @@ import math
 from decimal import Decimal
 q96 = 2**96
 
-Pa = 2800
-P = 2835
-Pb = 3000
+P = 0.00329983
+Pa = P * 0.95
+Pb = P * 1.1
 
 def get_R(Pa, P, Pb):
     Pa_sqrt = math.sqrt(Pa)
@@ -38,7 +38,7 @@ liq0 = liquidity0(amount_eth, sqrtp_cur, sqrtp_upp)
 liq1 = liquidity1(amount_usdc, sqrtp_cur, sqrtp_low)
 liq = int(min(liq0, liq1))
 
-print("R", get_R(Pa, P, Pb), Decimal(get_R(Pa, P, Pb) * q96))
+print("R", get_R(Pa, P, Pb), Decimal(get_R(Pa, P, Pb) * q96), Decimal(0.003 * q96))
 print(sqrtp_low)
 print(sqrtp_cur)
 print(sqrtp_upp)
