@@ -9,63 +9,16 @@ import "@uniswap/v3-periphery/contracts/base/PeripheryImmutableState.sol";
 
 import {LibPercentageMath} from "./RateMath.sol";
 import {UniswapV3PositionLib, Position, MintParams} from "./libraries/UniswapV3PositionLib.sol";
+import "./interfaces/IUniswapV3LpManager.sol";
+import "./Callable.sol";
 
 /// @title Uniswap V3 Position Manager
 /// @notice Manages Uniswap V3 liquidity positions
-contract UniswapV3LpManager is LiquidityManagement {
-    error InvalidTokenId();
-    error InsufficientLiquidity();
-    error PriceSlippageCheck();
-    error InvalidCollectAmount();
-    error PositionNotCleared();
-
-    /// @notice Emitted when liquidity is increased for a position NFT
-    /// @dev Also emitted when a token is minted
-    /// @param tokenId The ID of the token for which liquidity was increased
-    /// @param liquidity The amount by which liquidity for the NFT position was increased
-    /// @param amount0 The amount of token0 that was paid for the increase in liquidity
-    /// @param amount1 The amount of token1 that was paid for the increase in liquidity
-    event IncreaseLiquidity(
-        uint256 indexed tokenId,
-        uint128 liquidity,
-        uint256 amount0,
-        uint256 amount1
-    );
-    /// @notice Emitted when liquidity is decreased for a position NFT
-    /// @param tokenId The ID of the token for which liquidity was decreased
-    /// @param liquidity The amount by which liquidity for the NFT position was decreased
-    /// @param amount0 The amount of token0 that was accounted for the decrease in liquidity
-    /// @param amount1 The amount of token1 that was accounted for the decrease in liquidity
-    event DecreaseLiquidity(
-        uint256 indexed tokenId,
-        uint128 liquidity,
-        uint256 amount0,
-        uint256 amount1
-    );
-    /// @notice Emitted when tokens are collected for a position NFT
-    /// @dev The amounts reported may not be exactly equivalent to the amounts transferred, due to rounding behavior
-    /// @param tokenId The ID of the token for which underlying tokens were collected
-    /// @param recipient The address of the account that received the collected tokens
-    /// @param amount0 The amount of token0 owed to the position that was collected
-    /// @param amount1 The amount of token1 owed to the position that was collected
-    event Collect(
-        uint256 indexed tokenId,
-        address recipient,
-        uint256 amount0,
-        uint256 amount1
-    );
-    /// @notice Emitted when a new position is created
-    /// @param tokenId The ID of the token for which position was created
-    /// @param liquidity The amount of liquidity provided for the position
-    /// @param amount0 The amount of token0 used to create the position
-    /// @param amount1 The amount of token1 used to create the position
-    event PositionCreated(
-        uint256 indexed tokenId,
-        uint128 liquidity,
-        uint256 amount0,
-        uint256 amount1
-    );
-
+contract UniswapV3LpManager is
+    LiquidityManagement,
+    IUniswapV3LpManager,
+    Callable
+{
     /// @dev IDs of pools assigned by this contract
     mapping(address => uint80) private _poolIds;
 
@@ -83,7 +36,7 @@ contract UniswapV3LpManager is LiquidityManagement {
     constructor(
         address _factory,
         address _WETH9
-    ) PeripheryImmutableState(_factory, _WETH9) {}
+    ) PeripheryImmutableState(_factory, _WETH9) Callable(msg.sender) {}
 
     function positions(
         uint256 tokenId
@@ -105,7 +58,7 @@ contract UniswapV3LpManager is LiquidityManagement {
     {
         Position memory position = _positions[tokenId];
         if (position.poolId == 0) {
-            revert InvalidTokenId();
+            revert InvalidTokenId(tokenId);
         }
 
         PoolAddress.PoolKey memory poolKey = _poolIdToPoolKey[position.poolId];
@@ -135,7 +88,16 @@ contract UniswapV3LpManager is LiquidityManagement {
         }
     }
 
-    function burn(uint256 tokenId) external {
+    function updatePosition(
+        uint256 oldTokenId,
+        uint256 newTokenId
+    ) external onlyCaller {
+        _nextId--;
+        _positions[oldTokenId] = _positions[newTokenId];
+        delete _positions[newTokenId];
+    }
+
+    function burn(uint256 tokenId) external onlyCaller {
         Position storage position = _positions[tokenId];
         if (
             position.liquidity != 0 ||
@@ -145,11 +107,37 @@ contract UniswapV3LpManager is LiquidityManagement {
         delete _positions[tokenId];
     }
 
-    /// @dev Gets pool instance and pool key for a position
     function getPoolInfo(
+        uint256 tokenId
+    )
+        external
+        view
+        override
+        returns (
+            IUniswapV3Pool pool,
+            PoolAddress.PoolKey memory poolKey,
+            uint256 token0,
+            uint256 token1
+        )
+    {
+        Position storage position = _positions[tokenId];
+        if (position.poolId == 0) {
+            revert InvalidTokenId(tokenId);
+        }
+
+        if (position.liquidity == 0) {
+            revert InsufficientLiquidity(tokenId);
+        }
+        token0 = position.tokensOwed0;
+        token1 = position.tokensOwed1;
+        (pool, poolKey) = _getPoolInfo(position);
+    }
+
+    /// @dev Gets pool instance and pool key for a position
+    function _getPoolInfo(
         Position memory position
     )
-        public
+        internal
         view
         returns (IUniswapV3Pool pool, PoolAddress.PoolKey memory poolKey)
     {
@@ -168,6 +156,8 @@ contract UniswapV3LpManager is LiquidityManagement {
         uint16 maxMintSlippageRate
     )
         external
+        override
+        onlyCaller
         returns (
             uint256 tokenId,
             uint128 liquidity,
@@ -263,11 +253,17 @@ contract UniswapV3LpManager is LiquidityManagement {
         uint256 amount1Desired,
         uint256 amount0Min,
         uint256 amount1Min
-    ) external returns (uint128 liquidity, uint256 amount0, uint256 amount1) {
+    )
+        external
+        override
+        onlyCaller
+        returns (uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
         Position storage position = _positions[tokenId];
-        (IUniswapV3Pool pool, PoolAddress.PoolKey memory poolKey) = getPoolInfo(
-            position
-        );
+        (
+            IUniswapV3Pool pool,
+            PoolAddress.PoolKey memory poolKey
+        ) = _getPoolInfo(position);
 
         (liquidity, amount0, amount1, ) = addLiquidity(
             AddLiquidityParams({
@@ -296,26 +292,25 @@ contract UniswapV3LpManager is LiquidityManagement {
 
     function decreaseLiquidity(
         uint256 tokenId,
-        uint128 liquidity,
+        uint16 percentage,
         uint256 amount0Min,
         uint256 amount1Min
-    ) public returns (uint256 amount0, uint256 amount1) {
-        if (liquidity == 0) {
-            revert InsufficientLiquidity();
-        }
-
+    ) external override onlyCaller returns (uint256 amount0, uint256 amount1) {
         Position storage position = _positions[tokenId];
-
-        uint128 positionLiquidity = position.liquidity;
-        if (positionLiquidity < liquidity) {
-            revert InsufficientLiquidity();
+        if (position.liquidity == 0) {
+            revert InsufficientLiquidity(tokenId);
         }
 
-        (IUniswapV3Pool pool, ) = getPoolInfo(position);
+        uint128 newLiquidity = LibPercentageMath.multiplyU128(
+            position.liquidity,
+            percentage
+        );
+
+        (IUniswapV3Pool pool, ) = _getPoolInfo(position);
         (amount0, amount1) = pool.burn(
             position.tickLower,
             position.tickUpper,
-            liquidity
+            newLiquidity
         );
 
         if (amount0 < amount0Min || amount1 < amount1Min) {
@@ -325,13 +320,13 @@ contract UniswapV3LpManager is LiquidityManagement {
         UniswapV3PositionLib.updatePositionFeeGrowth(
             position,
             pool,
-            positionLiquidity
+            newLiquidity
         );
         position.tokensOwed0 += uint128(amount0);
         position.tokensOwed1 += uint128(amount1);
-        position.liquidity = positionLiquidity - liquidity;
+        position.liquidity -= newLiquidity;
 
-        emit DecreaseLiquidity(tokenId, liquidity, amount0, amount1);
+        emit DecreaseLiquidity(tokenId, newLiquidity, amount0, amount1);
     }
 
     function collect(
@@ -340,7 +335,9 @@ contract UniswapV3LpManager is LiquidityManagement {
         uint128 amount0Max,
         uint128 amount1Max
     )
-        public
+        external
+        override
+        onlyCaller
         returns (
             uint256 amount0,
             uint256 amount1,
@@ -355,7 +352,7 @@ contract UniswapV3LpManager is LiquidityManagement {
 
         Position storage position = _positions[tokenId];
         IUniswapV3Pool pool;
-        (pool, poolKey) = getPoolInfo(position);
+        (pool, poolKey) = _getPoolInfo(position);
 
         (uint128 tokensOwed0, uint128 tokensOwed1) = (
             position.tokensOwed0,
