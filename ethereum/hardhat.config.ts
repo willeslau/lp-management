@@ -1,6 +1,7 @@
 // require('hardhat-ethernal');
 import "@nomicfoundation/hardhat-ethers";
 import "@nomicfoundation/hardhat-toolbox";
+import "hardhat-contract-sizer";
 
 // You need to export an object to set up your config
 // Go to https://hardhat.org/config/ to learn more
@@ -15,7 +16,7 @@ module.exports = {
       viaIR: true,
       optimizer: {
         enabled: true,
-        runs: 200,
+        runs: 50,
         details: {
           yulDetails: {
             optimizerSteps: "u"
@@ -23,5 +24,11 @@ module.exports = {
         }
       }
     }
+  },
+  contractSizer: {
+    alphaSort: true,
+    disambiguatePaths: true,
+    runOnCompile: true,
+    strict: true
   }
 };

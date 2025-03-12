@@ -2,9 +2,6 @@
 pragma solidity ^0.8.0;
 
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "@uniswap/v3-core/contracts/libraries/FixedPoint128.sol";
-import "@uniswap/v3-core/contracts/libraries/FullMath.sol";
-
 import "@uniswap/v3-periphery/contracts/libraries/PositionKey.sol";
 import "@uniswap/v3-periphery/contracts/libraries/PoolAddress.sol";
 import "@uniswap/v3-periphery/contracts/base/LiquidityManagement.sol";
@@ -19,6 +16,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 import "./UniswapV3SwapPool.sol";
 import {LibPercentageMath} from "./RateMath.sol";
+import {UniswapV3PositionLib, Position, MintParams} from "./libraries/UniswapV3PositionLib.sol";
 
 struct RebalanceParams {
     uint256 tokenId;
@@ -31,18 +29,6 @@ struct RebalanceParams {
     int24 tickUpper;
 }
 
-// details about the uniswap position
-struct Position {
-    uint80 poolId;
-    int24 tickLower;
-    int24 tickUpper;
-    uint128 liquidity;
-    uint256 feeGrowthInside0LastX128;
-    uint256 feeGrowthInside1LastX128;
-    uint128 tokensOwed0;
-    uint128 tokensOwed1;
-}
-
 /// @notice The list of parameters for uniswap V3 liquidity operations
 struct OperationParams {
     /// @notice True means the fee collected will be used into new position
@@ -53,19 +39,9 @@ struct OperationParams {
     uint16 protocolFeeRate;
 }
 
-struct MintParams {
-    address token0;
-    address token1;
-    uint24 fee;
-    int24 tickLower;
-    int24 tickUpper;
-    uint256 amount0Desired;
-    uint256 amount1Desired;
-}
-
 /// @title Uniswap V3 Position Manager
 /// @notice Manages Uniswap V3 liquidity positions
-contract UniswapV3Manager is
+contract UniswapV3LpHandlerV2 is
     Multicall,
     UniswapV3SwapPool,
     PoolInitializer,
@@ -352,8 +328,8 @@ contract UniswapV3Manager is
             amount1Min
         );
 
-        _sendTo(msg.sender, poolKey.token0, amount0);
-        _sendTo(msg.sender, poolKey.token1, amount1);
+        UniswapV3PositionLib.sendTokens(msg.sender, poolKey.token0, amount0);
+        UniswapV3PositionLib.sendTokens(msg.sender, poolKey.token1, amount1);
     }
 
     /// @notice Collects all the fees associated with provided liquidity
@@ -387,15 +363,15 @@ contract UniswapV3Manager is
         uint256 protocolFee1 = _calculateProtocolFee(amount1);
 
         if (protocolFee0 != 0) {
-            _sendTo(liquidityOwner, poolKey.token0, protocolFee0);
+            UniswapV3PositionLib.sendTokens(liquidityOwner, poolKey.token0, protocolFee0);
         }
 
         if (protocolFee1 != 0) {
-            _sendTo(liquidityOwner, poolKey.token1, protocolFee1);
+            UniswapV3PositionLib.sendTokens(liquidityOwner, poolKey.token1, protocolFee1);
         }
 
-        _sendTo(msg.sender, poolKey.token0, amount0 - protocolFee0);
-        _sendTo(msg.sender, poolKey.token1, amount1 - protocolFee1);
+        UniswapV3PositionLib.sendTokens(msg.sender, poolKey.token0, amount0 - protocolFee0);
+        UniswapV3PositionLib.sendTokens(msg.sender, poolKey.token1, amount1 - protocolFee1);
         emit FeesCollected(tokenId, amount0, amount1);
     }
 
@@ -501,46 +477,6 @@ contract UniswapV3Manager is
         }
     }
 
-    /// @dev Updates position's fee growth and tokens owed
-    function _updatePositionFeeGrowth(
-        Position storage position,
-        IUniswapV3Pool pool,
-        uint128 positionLiquidity
-    )
-        internal
-        returns (
-            uint256 feeGrowthInside0LastX128,
-            uint256 feeGrowthInside1LastX128
-        )
-    {
-        bytes32 positionKey = PositionKey.compute(
-            address(this),
-            position.tickLower,
-            position.tickUpper
-        );
-
-        (, feeGrowthInside0LastX128, feeGrowthInside1LastX128, , ) = pool
-            .positions(positionKey);
-
-        position.tokensOwed0 += uint128(
-            FullMath.mulDiv(
-                feeGrowthInside0LastX128 - position.feeGrowthInside0LastX128,
-                positionLiquidity,
-                FixedPoint128.Q128
-            )
-        );
-        position.tokensOwed1 += uint128(
-            FullMath.mulDiv(
-                feeGrowthInside1LastX128 - position.feeGrowthInside1LastX128,
-                positionLiquidity,
-                FixedPoint128.Q128
-            )
-        );
-
-        position.feeGrowthInside0LastX128 = feeGrowthInside0LastX128;
-        position.feeGrowthInside1LastX128 = feeGrowthInside1LastX128;
-    }
-
     /// @dev Gets pool instance and pool key for a position
     function _getPoolInfo(
         Position memory position
@@ -580,9 +516,10 @@ contract UniswapV3Manager is
             amount1Desired: amount1Desired
         });
 
-        (uint256 amount0Min, uint256 amount1Min) = _calculateMinAmounts(
+        (uint256 amount0Min, uint256 amount1Min) = UniswapV3PositionLib.calculateMinAmounts(
             params.amount0Desired,
-            params.amount1Desired
+            params.amount1Desired,
+            operationalParams.maxMintSlippageRate
         );
         AddLiquidityParams memory addParams = _setupAddLiquidityParams(
             params,
@@ -616,7 +553,8 @@ contract UniswapV3Manager is
             })
         );
 
-        _createPosition(
+        UniswapV3PositionLib.createPosition(
+            _positions,
             tokenId,
             poolId,
             params.tickLower,
@@ -627,40 +565,6 @@ contract UniswapV3Manager is
         );
 
         emit PositionCreated(tokenId, liquidity, amount0, amount1);
-    }
-
-    function _calculateMinAmounts(
-        uint256 amount0Desired,
-        uint256 amount1Desired
-    ) internal view returns (uint256 amount0Min, uint256 amount1Min) {
-        uint16 maxMintSlippageRate = operationalParams.maxMintSlippageRate;
-        amount0Min =
-            amount0Desired -
-            LibPercentageMath.multiply(amount0Desired, maxMintSlippageRate);
-        amount1Min =
-            amount1Desired -
-            LibPercentageMath.multiply(amount1Desired, maxMintSlippageRate);
-    }
-
-    function _createPosition(
-        uint256 tokenId,
-        uint80 poolId,
-        int24 tickLower,
-        int24 tickUpper,
-        uint128 liquidity,
-        uint256 feeGrowthInside0LastX128,
-        uint256 feeGrowthInside1LastX128
-    ) internal {
-        _positions[tokenId] = Position({
-            poolId: poolId,
-            tickLower: tickLower,
-            tickUpper: tickUpper,
-            liquidity: liquidity,
-            feeGrowthInside0LastX128: feeGrowthInside0LastX128,
-            feeGrowthInside1LastX128: feeGrowthInside1LastX128,
-            tokensOwed0: 0,
-            tokensOwed1: 0
-        });
     }
 
     function _setupAddLiquidityParams(
@@ -699,7 +603,7 @@ contract UniswapV3Manager is
 
         if (_reserve0 > _target0 && _reserve1 < _target1) {
             amountIn = _reserve0 - _target0;
-            amountOutMinimum = _calculateAmountOutMinimum(
+            amountOutMinimum = UniswapV3PositionLib.calculateAmountOutMinimum(
                 _target1,
                 _reserve1,
                 _slippage
@@ -707,7 +611,7 @@ contract UniswapV3Manager is
             isToken0ToToken1 = true;
         } else if (_reserve0 < _target0 && _reserve1 > _target1) {
             amountIn = _reserve1 - _target1;
-            amountOutMinimum = _calculateAmountOutMinimum(
+            amountOutMinimum = UniswapV3PositionLib.calculateAmountOutMinimum(
                 _target0,
                 _reserve0,
                 _slippage
@@ -725,14 +629,6 @@ contract UniswapV3Manager is
             amountOutMinimum,
             isToken0ToToken1
         );
-    }
-
-    function _calculateAmountOutMinimum(
-        uint256 target,
-        uint256 reserve,
-        uint16 slippage
-    ) private pure returns (uint256) {
-        return ((target - reserve) * (1000 - slippage)) / 1000;
     }
 
     function _increaseLiquidity(
@@ -763,7 +659,7 @@ contract UniswapV3Manager is
             })
         );
 
-        _updatePositionFeeGrowth(position, pool, position.liquidity);
+        UniswapV3PositionLib.updatePositionFeeGrowth(position, pool, position.liquidity);
         position.liquidity += liquidity;
 
         emit IncreaseLiquidity(tokenId, liquidity, amount0, amount1);
@@ -797,7 +693,7 @@ contract UniswapV3Manager is
             revert PriceSlippageCheck();
         }
 
-        _updatePositionFeeGrowth(position, pool, positionLiquidity);
+        UniswapV3PositionLib.updatePositionFeeGrowth(position, pool, positionLiquidity);
         position.tokensOwed0 += uint128(amount0);
         position.tokensOwed1 += uint128(amount1);
         position.liquidity = positionLiquidity - liquidity;
@@ -835,7 +731,7 @@ contract UniswapV3Manager is
 
         if (position.liquidity > 0) {
             pool.burn(position.tickLower, position.tickUpper, 0);
-            _updatePositionFeeGrowth(position, pool, position.liquidity);
+            UniswapV3PositionLib.updatePositionFeeGrowth(position, pool, position.liquidity);
             tokensOwed0 = position.tokensOwed0;
             tokensOwed1 = position.tokensOwed1;
         }
@@ -859,31 +755,13 @@ contract UniswapV3Manager is
         emit Collect(tokenId, recipient, amount0Collect, amount1Collect);
     }
 
-    /// @notice Transfers funds to owner of NFT
-    /// @param _recipient The recipient of the funds
-    /// @param _tokenAddress The address of the token to send
-    /// @param _amount The amount of token
-    function _sendTo(
-        address _recipient,
-        address _tokenAddress,
-        uint256 _amount
-    ) internal {
-        IERC20(_tokenAddress).safeTransfer(_recipient, _amount);
-    }
-
     /// @notice Refund the extract amount not provided to the LP pool back to liquidity owner
     function _refund(
         address _tokenAddress,
         uint256 _amountExpected,
         uint256 _amountActual
     ) internal {
-        if (_amountExpected > _amountActual) {
-            IERC20(_tokenAddress).forceApprove(address(this), 0);
-            IERC20(_tokenAddress).safeTransfer(
-                msg.sender,
-                _amountExpected - _amountActual
-            );
-        }
+        UniswapV3PositionLib.refundExcess(_tokenAddress, _amountExpected, _amountActual, msg.sender);
     }
 
     /// @dev Transfers user funds into this contract and approves uniswap for spending it
@@ -891,14 +769,6 @@ contract UniswapV3Manager is
         address _tokenAddress,
         uint256 _amount
     ) internal {
-        // transfer tokens to contract
-        IERC20(_tokenAddress).safeTransferFrom(
-            msg.sender,
-            address(this),
-            _amount
-        );
-
-        // Approve the position manager
-        IERC20(_tokenAddress).forceApprove(address(this), _amount);
+        UniswapV3PositionLib.transferAndApprove(_tokenAddress, _amount, msg.sender, address(this));
     }
 }
