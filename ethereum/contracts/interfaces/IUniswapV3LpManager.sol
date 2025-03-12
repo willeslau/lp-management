@@ -22,8 +22,8 @@ interface IUniswapV3LpManager {
     /// @dev Also emitted when a position is minted
     /// @param positionId The ID of the position for which liquidity was increased
     /// @param liquidity The amount by which liquidity for the NFT position was increased
-    /// @param amount0 The amount of position0 that was paid for the increase in liquidity
-    /// @param amount1 The amount of position1 that was paid for the increase in liquidity
+    /// @param amount0 The amount of token0 that was paid for the increase in liquidity
+    /// @param amount1 The amount of token1 that was paid for the increase in liquidity
     event IncreaseLiquidity(
         uint256 indexed positionId,
         uint128 liquidity,
@@ -33,8 +33,8 @@ interface IUniswapV3LpManager {
     /// @notice Emitted when liquidity is decreased for a position NFT
     /// @param positionId The ID of the position for which liquidity was decreased
     /// @param liquidity The amount by which liquidity for the NFT position was decreased
-    /// @param amount0 The amount of position0 that was accounted for the decrease in liquidity
-    /// @param amount1 The amount of position1 that was accounted for the decrease in liquidity
+    /// @param amount0 The amount of token0 that was accounted for the decrease in liquidity
+    /// @param amount1 The amount of token1 that was accounted for the decrease in liquidity
     event DecreaseLiquidity(
         uint256 indexed positionId,
         uint128 liquidity,
@@ -45,8 +45,8 @@ interface IUniswapV3LpManager {
     /// @dev The amounts reported may not be exactly equivalent to the amounts transferred, due to rounding behavior
     /// @param positionId The ID of the position for which underlying positions were collected
     /// @param recipient The address of the account that received the collected positions
-    /// @param amount0 The amount of position0 owed to the position that was collected
-    /// @param amount1 The amount of position1 owed to the position that was collected
+    /// @param amount0 The amount of token0 owed to the position that was collected
+    /// @param amount1 The amount of token1 owed to the position that was collected
     event Collect(
         uint256 indexed positionId,
         address recipient,
@@ -56,8 +56,8 @@ interface IUniswapV3LpManager {
     /// @notice Emitted when a new position is created
     /// @param positionId The ID of the position for which position was created
     /// @param liquidity The amount of liquidity provided for the position
-    /// @param amount0 The amount of position0 used to create the position
-    /// @param amount1 The amount of position1 used to create the position
+    /// @param amount0 The amount of token0 used to create the position
+    /// @param amount1 The amount of token1 used to create the position
     event PositionCreated(
         uint256 indexed positionId,
         uint128 liquidity,
@@ -76,13 +76,13 @@ interface IUniswapV3LpManager {
         returns (
             IUniswapV3Pool pool,
             PoolAddress.PoolKey memory poolKey,
-            uint256 position0,
-            uint256 position1
+            uint256 token0,
+            uint256 token1
         );
 
     function mint(
-        address position0,
-        address position1,
+        address token0,
+        address token1,
         uint24 fee,
         int24 tickLower,
         int24 tickUpper,
