@@ -307,42 +307,34 @@ contract UniswapV3Manager is
     function increaseLiquidity(
         uint256 tokenId,
         uint256 amount0Desired,
-        uint256 amount1Desired,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        uint256 deadline
-    )
-        external
-        payable
-        onlyLiquidityOwner
-        checkDeadline(deadline)
-        returns (uint128 liquidity, uint256 amount0, uint256 amount1)
-    {
+        uint256 amount1Desired
+    ) external payable onlyLiquidityOwner {
         Position storage position = _positions[tokenId];
-        (
-            IUniswapV3Pool pool,
-            PoolAddress.PoolKey memory poolKey
-        ) = _getPoolInfo(position);
+        (, PoolAddress.PoolKey memory poolKey) = _getPoolInfo(position);
 
-        (liquidity, amount0, amount1, ) = addLiquidity(
-            AddLiquidityParams({
-                token0: poolKey.token0,
-                token1: poolKey.token1,
-                fee: poolKey.fee,
-                tickLower: position.tickLower,
-                tickUpper: position.tickUpper,
-                amount0Desired: amount0Desired,
-                amount1Desired: amount1Desired,
-                amount0Min: amount0Min,
-                amount1Min: amount1Min,
-                recipient: address(this)
-            })
+        _transferFundsAndApprove(poolKey.token0, amount0Desired);
+        _transferFundsAndApprove(poolKey.token1, amount1Desired);
+
+        uint16 maxMintSlippageRate = operationalParams.maxMintSlippageRate;
+        uint256 amount0Min = LibPercentageMath.multiply(
+            amount0Desired,
+            maxMintSlippageRate
+        );
+        uint256 amount1Min = LibPercentageMath.multiply(
+            amount1Desired,
+            maxMintSlippageRate
         );
 
-        _updatePositionFeeGrowth(position, pool, position.liquidity);
-        position.liquidity += liquidity;
+        (, uint256 amount0Minted, uint256 amount1Minted) = _increaseLiquidity(
+            tokenId,
+            amount0Desired,
+            amount1Desired,
+            amount0Min,
+            amount1Min
+        );
 
-        emit IncreaseLiquidity(tokenId, liquidity, amount0, amount1);
+        _refund(poolKey.token0, amount0Desired, amount0Minted);
+        _refund(poolKey.token1, amount1Desired, amount1Minted);
     }
 
     function decreaseLiquidity(
@@ -350,20 +342,18 @@ contract UniswapV3Manager is
         uint128 liquidity,
         uint256 amount0Min,
         uint256 amount1Min
-    )
-        external
-        payable
-        onlyLiquidityOwner
-        returns (uint256 amount0, uint256 amount1)
-    {
-        return
-            _decreaseLiquidity(
-                tokenId,
-                liquidity,
-                amount0Min,
-                amount1Min,
-                block.timestamp
-            );
+    ) external payable onlyLiquidityOwner {
+        Position storage position = _positions[tokenId];
+        (, PoolAddress.PoolKey memory poolKey) = _getPoolInfo(position);
+        (uint256 amount0, uint256 amount1) = _decreaseLiquidity(
+            tokenId,
+            liquidity,
+            amount0Min,
+            amount1Min
+        );
+
+        _sendTo(msg.sender, poolKey.token0, amount0);
+        _sendTo(msg.sender, poolKey.token1, amount1);
     }
 
     /// @notice Collects all the fees associated with provided liquidity
@@ -493,13 +483,7 @@ contract UniswapV3Manager is
         // collect fee
         _collect(tokenId, address(this), type(uint128).max, type(uint128).max);
 
-        _decreaseLiquidity(
-            tokenId,
-            position.liquidity,
-            amount0Min,
-            amount1Min,
-            block.timestamp
-        );
+        _decreaseLiquidity(tokenId, position.liquidity, amount0Min, amount1Min);
     }
 
     function _calculateProtocolFee(
@@ -751,17 +735,46 @@ contract UniswapV3Manager is
         return ((target - reserve) * (1000 - slippage)) / 1000;
     }
 
+    function _increaseLiquidity(
+        uint256 tokenId,
+        uint256 amount0Desired,
+        uint256 amount1Desired,
+        uint256 amount0Min,
+        uint256 amount1Min
+    ) internal returns (uint128 liquidity, uint256 amount0, uint256 amount1) {
+        Position storage position = _positions[tokenId];
+        (
+            IUniswapV3Pool pool,
+            PoolAddress.PoolKey memory poolKey
+        ) = _getPoolInfo(position);
+
+        (liquidity, amount0, amount1, ) = addLiquidity(
+            AddLiquidityParams({
+                token0: poolKey.token0,
+                token1: poolKey.token1,
+                fee: poolKey.fee,
+                tickLower: position.tickLower,
+                tickUpper: position.tickUpper,
+                amount0Desired: amount0Desired,
+                amount1Desired: amount1Desired,
+                amount0Min: amount0Min,
+                amount1Min: amount1Min,
+                recipient: address(this)
+            })
+        );
+
+        _updatePositionFeeGrowth(position, pool, position.liquidity);
+        position.liquidity += liquidity;
+
+        emit IncreaseLiquidity(tokenId, liquidity, amount0, amount1);
+    }
+
     function _decreaseLiquidity(
         uint256 tokenId,
         uint128 liquidity,
         uint256 amount0Min,
-        uint256 amount1Min,
-        uint256 deadline
-    )
-        internal
-        checkDeadline(deadline)
-        returns (uint256 amount0, uint256 amount1)
-    {
+        uint256 amount1Min
+    ) internal returns (uint256 amount0, uint256 amount1) {
         if (liquidity == 0) {
             revert InsufficientLiquidity();
         }
@@ -856,5 +869,36 @@ contract UniswapV3Manager is
         uint256 _amount
     ) internal {
         IERC20(_tokenAddress).safeTransfer(_recipient, _amount);
+    }
+
+    /// @notice Refund the extract amount not provided to the LP pool back to liquidity owner
+    function _refund(
+        address _tokenAddress,
+        uint256 _amountExpected,
+        uint256 _amountActual
+    ) internal {
+        if (_amountExpected > _amountActual) {
+            IERC20(_tokenAddress).forceApprove(address(this), 0);
+            IERC20(_tokenAddress).safeTransfer(
+                msg.sender,
+                _amountExpected - _amountActual
+            );
+        }
+    }
+
+    /// @dev Transfers user funds into this contract and approves uniswap for spending it
+    function _transferFundsAndApprove(
+        address _tokenAddress,
+        uint256 _amount
+    ) internal {
+        // transfer tokens to contract
+        IERC20(_tokenAddress).safeTransferFrom(
+            msg.sender,
+            address(this),
+            _amount
+        );
+
+        // Approve the position manager
+        IERC20(_tokenAddress).forceApprove(address(this), _amount);
     }
 }
