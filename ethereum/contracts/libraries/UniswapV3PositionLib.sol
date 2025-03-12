@@ -123,22 +123,6 @@ library UniswapV3PositionLib {
         return ((target - reserve) * (1000 - slippage)) / 1000;
     }
 
-    /// @dev Refund the extract amount not provided to the LP pool back to sender
-    function refundExcess(
-        address tokenAddress,
-        uint256 amountExpected,
-        uint256 amountActual,
-        address recipient
-    ) internal {
-        if (amountExpected > amountActual) {
-            IERC20(tokenAddress).forceApprove(address(this), 0);
-            IERC20(tokenAddress).safeTransfer(
-                recipient,
-                amountExpected - amountActual
-            );
-        }
-    }
-
     /// @dev Transfers funds to recipient
     function sendTokens(
         address recipient,
@@ -148,20 +132,6 @@ library UniswapV3PositionLib {
         if (amount > 0) {
             IERC20(tokenAddress).safeTransfer(recipient, amount);
         }
-    }
-
-    /// @dev Transfers user funds into contract and approves for spending
-    function transferAndApprove(
-        address tokenAddress,
-        uint256 amount,
-        address sender,
-        address spender
-    ) internal {
-        // transfer tokens to contract
-        IERC20(tokenAddress).safeTransferFrom(sender, address(this), amount);
-
-        // Approve the spender
-        IERC20(tokenAddress).forceApprove(spender, amount);
     }
 
     /// @dev Approve token if needed

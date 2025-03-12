@@ -170,17 +170,33 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         int24 tickUpper,
         uint256 amount0,
         uint256 amount1
-    ) external payable onlyLiquidityOwner {
-        IUniswapV3LpManager(lpManager).mint(
-            token0,
-            token1,
-            fee,
-            tickLower,
-            tickUpper,
-            amount0,
-            amount1,
-            operationalParams.maxMintSlippageRate
-        );
+    )
+        external
+        payable
+        onlyLiquidityOwner
+        validateTickRange(tickLower, tickUpper)
+    {
+        _transferFundsAndApprove(token0, amount0);
+        _transferFundsAndApprove(token1, amount1);
+
+        (
+            ,
+            ,
+            uint256 amount0Minted,
+            uint256 amount1Minted
+        ) = IUniswapV3LpManager(lpManager).mint(
+                token0,
+                token1,
+                fee,
+                tickLower,
+                tickUpper,
+                amount0,
+                amount1,
+                operationalParams.maxMintSlippageRate
+            );
+
+        _refund(token0, amount0, amount0Minted);
+        _refund(token1, amount1, amount1Minted);
     }
 
     function increaseLiquidity(
@@ -426,28 +442,25 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
 
     /// @notice Refund the extract amount not provided to the LP pool back to liquidity owner
     function _refund(
-        address _positionAddress,
+        address _token,
         uint256 _amountExpected,
         uint256 _amountActual
     ) internal {
-        UniswapV3PositionLib.refundExcess(
-            _positionAddress,
-            _amountExpected,
-            _amountActual,
-            msg.sender
-        );
+        if (_amountExpected > _amountActual) {
+            IERC20(_token).forceApprove(address(lpManager), 0);
+            IERC20(_token).safeTransfer(
+                msg.sender,
+                _amountExpected - _amountActual
+            );
+        }
     }
 
     /// @dev Transfers user funds into this contract and approves uniswap for spending it
     function _transferFundsAndApprove(
-        address _positionAddress,
+        address _token,
         uint256 _amount
     ) internal {
-        UniswapV3PositionLib.transferAndApprove(
-            _positionAddress,
-            _amount,
-            msg.sender,
-            address(this)
-        );
+        IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
+        IERC20(_token).forceApprove(lpManager, _amount);
     }
 }
