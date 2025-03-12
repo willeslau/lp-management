@@ -58,8 +58,8 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     /// @notice Emitted when a position is rebalanced to a new tick range
     /// @param positionId The ID of the position for which position was rebalanced
     /// @param liquidity The amount of liquidity in the rebalanced position
-    /// @param amount0 The amount of position0 used to create the position
-    /// @param amount1 The amount of position1 used to create the position
+    /// @param amount0 The amount of token0 used to create the position
+    /// @param amount1 The amount of token1 used to create the position
     /// @param tickLower The new lower tick of the position
     /// @param tickUpper The new upper tick of the position
     event PositionRebalanced(
@@ -72,8 +72,8 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     );
     /// @notice Emitted when fees are collected from a position
     /// @param positionId The ID of the position for which fees were collected
-    /// @param fee0 The amount of position0 fees that were collected
-    /// @param fee1 The amount of position1 fees that were collected
+    /// @param fee0 The amount of token0 fees that were collected
+    /// @param fee1 The amount of token1 fees that were collected
     event FeesCollected(uint256 indexed positionId, uint256 fee0, uint256 fee1);
 
     // @dev The list of configuration parameters for liquidity operations
@@ -163,8 +163,8 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     }
 
     function mint(
-        address position0,
-        address position1,
+        address token0,
+        address token1,
         uint24 fee,
         int24 tickLower,
         int24 tickUpper,
@@ -172,8 +172,8 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         uint256 amount1
     ) external payable onlyLiquidityOwner {
         IUniswapV3LpManager(lpManager).mint(
-            position0,
-            position1,
+            token0,
+            token1,
             fee,
             tickLower,
             tickUpper,
@@ -381,8 +381,8 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     }
 
     function _trySwap(
-        address position0,
-        address position1,
+        address token0,
+        address token1,
         uint24 fee,
         uint256 _reserve0,
         uint256 _reserve1,
@@ -415,8 +415,8 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         }
 
         _swap(
-            position0,
-            position1,
+            token0,
+            token1,
             fee,
             amountIn,
             amountOutMinimum,
