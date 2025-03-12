@@ -100,6 +100,13 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         _;
     }
 
+    modifier validateTickRange(int24 _tickLower, int24 _tickUpper) {
+        if (_tickLower >= _tickUpper) {
+            revert InvalidTickRange(_tickLower, _tickUpper);
+        }
+        _;
+    }
+
     constructor(
         address _lpManager,
         address _factory,
@@ -287,9 +294,13 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         emit FeesCollected(tokenId, amount0, amount1);
     }
 
-    function rebalance(RebalanceParams calldata params) external onlyBalancer {
-        _validateTickRange(params.tickLower, params.tickUpper);
-
+    function rebalance(
+        RebalanceParams calldata params
+    )
+        external
+        onlyBalancer
+        validateTickRange(params.tickLower, params.tickUpper)
+    {
         (
             ,
             PoolAddress.PoolKey memory poolKey,
@@ -364,15 +375,6 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         uint256 amount
     ) internal view returns (uint256) {
         return (amount * operationalParams.protocolFeeRate) / 1000;
-    }
-
-    function _validateTickRange(
-        int24 _tickLower,
-        int24 _tickUpper
-    ) internal pure {
-        if (_tickLower >= _tickUpper) {
-            revert InvalidTickRange(_tickLower, _tickUpper);
-        }
     }
 
     function _trySwap(
