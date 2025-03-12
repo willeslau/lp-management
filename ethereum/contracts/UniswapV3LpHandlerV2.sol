@@ -366,7 +366,23 @@ contract UniswapV3Manager is
             );
     }
 
-    function collectAllFees(uint256 tokenId) external onlyLiquidityOwner {
+    /// @notice Collects all the fees associated with provided liquidity
+    /// @param tokenIds The ids of the token to mint in uniswap v3
+    function batchCollectFees(
+        uint256[] calldata tokenIds
+    ) external onlyLiquidityOwner {
+        uint256 length = tokenIds.length;
+        for (uint256 i = 0; i < length; ) {
+            collectAllFees(tokenIds[i]);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @notice Collects the fees associated with provided liquidity
+    /// @param tokenId The id of the token to mint in uniswap v3
+    function collectAllFees(uint256 tokenId) public onlyLiquidityOwner {
         (
             uint256 amount0,
             uint256 amount1,
