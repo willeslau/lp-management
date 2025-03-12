@@ -16,7 +16,7 @@ import {UniswapV3PositionLib, Position} from "./libraries/UniswapV3PositionLib.s
 import "./interfaces/IUniswapV3LpManager.sol";
 
 struct RebalanceParams {
-    uint256 tokenId;
+    uint256 positionId;
     uint256 amount0WithdrawMin;
     uint256 amount1WithdrawMin;
     uint16 swapSlippage;
@@ -41,8 +41,8 @@ struct OperationParams {
 contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     using SafeERC20 for IERC20;
 
-    error InvalidTokenId(uint256 tokenId);
-    error InsufficientLiquidity(uint256 tokenId);
+    error InvalidPositionId(uint256 positionId);
+    error InsufficientLiquidity(uint256 positionId);
     error NotLiquidityOwner(address sender);
     error NotBalancer(address sender);
     error InvalidTickRange(int24 tickLower, int24 tickUpper);
@@ -56,14 +56,14 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     error RateTooHigh(uint16 rate);
 
     /// @notice Emitted when a position is rebalanced to a new tick range
-    /// @param tokenId The ID of the token for which position was rebalanced
+    /// @param positionId The ID of the position for which position was rebalanced
     /// @param liquidity The amount of liquidity in the rebalanced position
-    /// @param amount0 The amount of token0 used to create the position
-    /// @param amount1 The amount of token1 used to create the position
+    /// @param amount0 The amount of position0 used to create the position
+    /// @param amount1 The amount of position1 used to create the position
     /// @param tickLower The new lower tick of the position
     /// @param tickUpper The new upper tick of the position
     event PositionRebalanced(
-        uint256 indexed tokenId,
+        uint256 indexed positionId,
         uint128 liquidity,
         uint256 amount0,
         uint256 amount1,
@@ -71,10 +71,10 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         int24 tickUpper
     );
     /// @notice Emitted when fees are collected from a position
-    /// @param tokenId The ID of the token for which fees were collected
-    /// @param fee0 The amount of token0 fees that were collected
-    /// @param fee1 The amount of token1 fees that were collected
-    event FeesCollected(uint256 indexed tokenId, uint256 fee0, uint256 fee1);
+    /// @param positionId The ID of the position for which fees were collected
+    /// @param fee0 The amount of position0 fees that were collected
+    /// @param fee1 The amount of position1 fees that were collected
+    event FeesCollected(uint256 indexed positionId, uint256 fee0, uint256 fee1);
 
     // @dev The list of configuration parameters for liquidity operations
     OperationParams public operationalParams;
@@ -163,8 +163,8 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     }
 
     function mint(
-        address token0,
-        address token1,
+        address position0,
+        address position1,
         uint24 fee,
         int24 tickLower,
         int24 tickUpper,
@@ -172,8 +172,8 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         uint256 amount1
     ) external payable onlyLiquidityOwner {
         IUniswapV3LpManager(lpManager).mint(
-            token0,
-            token1,
+            position0,
+            position1,
             fee,
             tickLower,
             tickUpper,
@@ -184,13 +184,13 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     }
 
     function increaseLiquidity(
-        uint256 tokenId,
+        uint256 positionId,
         uint256 amount0Desired,
         uint256 amount1Desired
     ) external payable onlyLiquidityOwner {
         (, PoolAddress.PoolKey memory poolKey, , ) = IUniswapV3LpManager(
             lpManager
-        ).getPoolInfo(tokenId);
+        ).getPoolInfo(positionId);
 
         _transferFundsAndApprove(poolKey.token0, amount0Desired);
         _transferFundsAndApprove(poolKey.token1, amount1Desired);
@@ -208,7 +208,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         (, uint256 amount0Minted, uint256 amount1Minted) = IUniswapV3LpManager(
             lpManager
         ).increaseLiquidity(
-                tokenId,
+                positionId,
                 amount0Desired,
                 amount1Desired,
                 amount0Min,
@@ -220,29 +220,29 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     }
 
     function decreaseLiquidity(
-        uint256 tokenId,
+        uint256 positionId,
         uint16 percentage,
         uint256 amount0Min,
         uint256 amount1Min
     ) external payable onlyLiquidityOwner {
         (, PoolAddress.PoolKey memory poolKey, , ) = IUniswapV3LpManager(
             lpManager
-        ).getPoolInfo(tokenId);
+        ).getPoolInfo(positionId);
         (uint256 amount0, uint256 amount1) = IUniswapV3LpManager(lpManager)
-            .decreaseLiquidity(tokenId, percentage, amount0Min, amount1Min);
+            .decreaseLiquidity(positionId, percentage, amount0Min, amount1Min);
 
         UniswapV3PositionLib.sendTokens(msg.sender, poolKey.token0, amount0);
         UniswapV3PositionLib.sendTokens(msg.sender, poolKey.token1, amount1);
     }
 
     /// @notice Collects all the fees associated with provided liquidity
-    /// @param tokenIds The ids of the token to mint in uniswap v3
+    /// @param positionIds The ids of the position to mint in uniswap v3
     function batchCollectFees(
-        uint256[] calldata tokenIds
+        uint256[] calldata positionIds
     ) external onlyLiquidityOwner {
-        uint256 length = tokenIds.length;
+        uint256 length = positionIds.length;
         for (uint256 i = 0; i < length; ) {
-            collectAllFees(tokenIds[i]);
+            collectAllFees(positionIds[i]);
             unchecked {
                 ++i;
             }
@@ -250,14 +250,14 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     }
 
     /// @notice Collects the fees associated with provided liquidity
-    /// @param tokenId The id of the token to mint in uniswap v3
-    function collectAllFees(uint256 tokenId) public onlyLiquidityOwner {
+    /// @param positionId The id of the position to mint in uniswap v3
+    function collectAllFees(uint256 positionId) public onlyLiquidityOwner {
         (
             uint256 amount0,
             uint256 amount1,
             PoolAddress.PoolKey memory poolKey
         ) = IUniswapV3LpManager(lpManager).collect(
-                tokenId,
+                positionId,
                 address(this),
                 type(uint128).max,
                 type(uint128).max
@@ -291,7 +291,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
             poolKey.token1,
             amount1 - protocolFee1
         );
-        emit FeesCollected(tokenId, amount0, amount1);
+        emit FeesCollected(positionId, amount0, amount1);
     }
 
     function rebalance(
@@ -306,7 +306,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
             PoolAddress.PoolKey memory poolKey,
             uint256 amount0,
             uint256 amount1
-        ) = IUniswapV3LpManager(lpManager).getPoolInfo(params.tokenId);
+        ) = IUniswapV3LpManager(lpManager).getPoolInfo(params.positionId);
 
         // 1. swap
         _trySwap(
@@ -322,7 +322,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
 
         // 2. add new liquidity
         (
-            uint256 tokenId,
+            uint256 positionId,
             uint128 liquidity,
             uint256 amount0Min,
             uint256 amount1Min
@@ -338,10 +338,13 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
             );
 
         // update position
-        IUniswapV3LpManager(lpManager).updatePosition(params.tokenId, tokenId);
+        IUniswapV3LpManager(lpManager).updatePosition(
+            params.positionId,
+            positionId
+        );
 
         emit PositionRebalanced(
-            tokenId,
+            positionId,
             liquidity,
             amount0Min,
             amount1Min,
@@ -351,20 +354,20 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     }
 
     function collectFeesAndReduceLiquidity(
-        uint256 tokenId,
+        uint256 positionId,
         uint256 amount0Min,
         uint256 amount1Min
     ) external onlyBalancer {
         // collect fee
         IUniswapV3LpManager(lpManager).collect(
-            tokenId,
+            positionId,
             address(this),
             type(uint128).max,
             type(uint128).max
         );
 
         IUniswapV3LpManager(lpManager).decreaseLiquidity(
-            tokenId,
+            positionId,
             LibPercentageMath.percentage100(),
             amount0Min,
             amount1Min
@@ -378,8 +381,8 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     }
 
     function _trySwap(
-        address token0,
-        address token1,
+        address position0,
+        address position1,
         uint24 fee,
         uint256 _reserve0,
         uint256 _reserve1,
@@ -412,8 +415,8 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         }
 
         _swap(
-            token0,
-            token1,
+            position0,
+            position1,
             fee,
             amountIn,
             amountOutMinimum,
@@ -423,12 +426,12 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
 
     /// @notice Refund the extract amount not provided to the LP pool back to liquidity owner
     function _refund(
-        address _tokenAddress,
+        address _positionAddress,
         uint256 _amountExpected,
         uint256 _amountActual
     ) internal {
         UniswapV3PositionLib.refundExcess(
-            _tokenAddress,
+            _positionAddress,
             _amountExpected,
             _amountActual,
             msg.sender
@@ -437,11 +440,11 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
 
     /// @dev Transfers user funds into this contract and approves uniswap for spending it
     function _transferFundsAndApprove(
-        address _tokenAddress,
+        address _positionAddress,
         uint256 _amount
     ) internal {
         UniswapV3PositionLib.transferAndApprove(
-            _tokenAddress,
+            _positionAddress,
             _amount,
             msg.sender,
             address(this)
