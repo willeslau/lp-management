@@ -113,9 +113,9 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         address _liquidityOwner,
         address _balancer
     ) UniswapV3SwapPool(_factory) {
-        setLpManager(_lpManager);
-        setLiquidityOwner(_liquidityOwner);
-        setBalancer(_balancer);
+        lpManager = _lpManager;
+        liquidityOwner = _liquidityOwner;
+        balancer = _balancer;
 
         // max slippage is 3%
         operationalParams.maxMintSlippageRate = 30;
