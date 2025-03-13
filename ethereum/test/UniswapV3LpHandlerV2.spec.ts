@@ -4,6 +4,7 @@ import { Contract, Signer } from "ethers";
 import { deployContractWithDeployer } from "../scripts/util";
 
 describe("UniswapV3LpHandlerV2", function () {
+  let supportedTokenPairs: Contract;
   let lpHandler: Contract;
   let lpManager: Contract;
   let mockWETH: Contract;
@@ -14,6 +15,7 @@ describe("UniswapV3LpHandlerV2", function () {
   let balancer: Signer;
   let liquidityOwner: Signer;
   let user: Signer;
+  let tokenPairId = 1;
 
   beforeEach(async function () {
     [deployer, balancer, liquidityOwner, user] = await ethers.getSigners();
@@ -23,6 +25,13 @@ describe("UniswapV3LpHandlerV2", function () {
     mockWETH = await MockERC20.deploy("Wrapped Ether", "WETH", 18);
     mockToken0 = await MockERC20.deploy("Token0", "TK0", 18);
     mockToken1 = await MockERC20.deploy("Token1", "TK1", 18);
+
+    supportedTokenPairs = await deployContractWithDeployer(
+      deployer,
+      "MockUniswapV3TokenPairs",
+      [],
+      false
+    );
 
     mockPool = await deployContractWithDeployer(
       deployer,
@@ -48,6 +57,7 @@ describe("UniswapV3LpHandlerV2", function () {
       deployer,
       "UniswapV3LpHandlerV2",
       [
+        await supportedTokenPairs.getAddress(),
         await lpManager.getAddress(),
         await mockPool.getAddress(),
         await liquidityOwner.getAddress(),
@@ -55,6 +65,8 @@ describe("UniswapV3LpHandlerV2", function () {
       ],
       false
     );
+
+    await setupTokenPair();
 
     // Set permissions for LpManager
     await lpManager.connect(deployer).setCaller(await lpHandler.getAddress());
@@ -76,6 +88,25 @@ describe("UniswapV3LpHandlerV2", function () {
       .connect(liquidityOwner)
       .approve(await lpHandler.getAddress(), ethers.MaxUint256);
   });
+
+  // Helper function: Setup token pair
+  async function setupTokenPair() {
+    const token0Address = await mockToken0.getAddress();
+    const token1Address = await mockToken1.getAddress();
+    const [sortedToken0, sortedToken1] =
+      token0Address.toLowerCase() < token1Address.toLowerCase()
+        ? [token0Address, token1Address]
+        : [token1Address, token0Address];
+
+    await supportedTokenPairs.addTokenPair(
+      await mockPool.getAddress(),
+      sortedToken0,
+      sortedToken1,
+      3000 // Fee
+    );
+
+    return { sortedToken0, sortedToken1 };
+  }
 
   describe("Constructor & Initial State", function () {
     it("should correctly set the initial state", async function () {
@@ -188,15 +219,25 @@ describe("UniswapV3LpHandlerV2", function () {
       const amount0 = ethers.parseEther("1");
       const amount1 = ethers.parseEther("1");
 
-      // Add token pair
-      const token0Address = await mockToken0.getAddress();
-      const token1Address = await mockToken1.getAddress();
-
       await expect(
         lpHandler
           .connect(user)
-          .mint(token0Address, token1Address, 3000, -100, 100, amount0, amount1)
+          .mint(tokenPairId, -100, 100, amount0, amount1)
       ).to.revertedWithCustomError(lpHandler, "NotLiquidityOwner");
+    });
+
+    it("should mint new liquidity", async function () {
+      const amount0 = ethers.parseEther("1");
+      const amount1 = ethers.parseEther("1");
+      await lpHandler
+        .connect(liquidityOwner)
+        .mint(tokenPairId, -100, 100, amount0, amount1);
+      expect(await mockToken0.balanceOf(await lpHandler.getAddress())).to.equal(
+        amount0
+      );
+      expect(await mockToken1.balanceOf(await lpHandler.getAddress())).to.equal(
+        amount1
+      );
     });
   });
 });

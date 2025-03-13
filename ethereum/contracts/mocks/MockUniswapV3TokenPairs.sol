@@ -9,6 +9,7 @@ contract MockUniswapV3TokenPairs is IUniswapV3TokenPairs {
     uint8 private _nextPairId = 1;
 
     function addTokenPair(
+        address pool,
         address token0,
         address token1,
         uint24 poolFee
@@ -19,6 +20,7 @@ contract MockUniswapV3TokenPairs is IUniswapV3TokenPairs {
         uint8 pairId = _nextPairId++;
         _tokenPairs[pairId] = TokenPair({
             id: pairId,
+            pool: pool,
             token0: token0,
             token1: token1,
             poolFee: poolFee

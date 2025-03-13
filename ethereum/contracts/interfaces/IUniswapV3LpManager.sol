@@ -8,13 +8,13 @@ import "@uniswap/v3-periphery/contracts/base/LiquidityManagement.sol";
 import "@uniswap/v3-periphery/contracts/base/PeripheryImmutableState.sol";
 
 import {UniswapV3PositionLib, Position, MintParams} from "../libraries/UniswapV3PositionLib.sol";
+import {TokenPair} from "./IUniswapV3TokenPairs.sol";
 
 /// @title Uniswap V3 Position Manager
 /// @notice Manages Uniswap V3 liquidity positions
 interface IUniswapV3LpManager {
     error InvalidPositionId(uint256 positionId);
     error InsufficientLiquidity(uint256 positionId);
-    error PriceSlippageCheck();
     error InvalidCollectAmount();
     error PositionNotCleared();
 
@@ -65,7 +65,10 @@ interface IUniswapV3LpManager {
         uint256 amount1
     );
 
-    function updatePosition(uint256 oldPositionId, uint256 newPositionId) external;
+    function updatePosition(
+        uint256 oldPositionId,
+        uint256 newPositionId
+    ) external;
 
     /// @dev Gets pool instance and pool key for a position
     function getPoolInfo(
@@ -74,16 +77,13 @@ interface IUniswapV3LpManager {
         external
         view
         returns (
-            IUniswapV3Pool pool,
             PoolAddress.PoolKey memory poolKey,
-            uint256 token0,
-            uint256 token1
+            uint256 amount0,
+            uint256 amount1
         );
 
     function mint(
-        address token0,
-        address token1,
-        uint24 fee,
+        TokenPair calldata tokenPair,
         int24 tickLower,
         int24 tickUpper,
         uint256 amount0Desired,
@@ -99,6 +99,7 @@ interface IUniswapV3LpManager {
         );
 
     function increaseLiquidity(
+        TokenPair calldata tokenPair,
         uint256 positionId,
         uint256 amount0Desired,
         uint256 amount1Desired,
@@ -107,6 +108,7 @@ interface IUniswapV3LpManager {
     ) external returns (uint128 liquidity, uint256 amount0, uint256 amount1);
 
     function decreaseLiquidity(
+        address pool,
         uint256 positionId,
         uint16 percentage,
         uint256 amount0Min,
@@ -114,15 +116,10 @@ interface IUniswapV3LpManager {
     ) external returns (uint256 amount0, uint256 amount1);
 
     function collect(
+        address pool,
         uint256 positionId,
         address recipient,
         uint128 amount0Max,
         uint128 amount1Max
-    )
-        external
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            PoolAddress.PoolKey memory poolKey
-        );
+    ) external returns (uint256 amount0, uint256 amount1);
 }

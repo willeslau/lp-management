@@ -9,6 +9,7 @@ import "@uniswap/v3-periphery/contracts/libraries/PoolAddress.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {LibPercentageMath} from "../RateMath.sol";
+import {TokenPair} from "../interfaces/IUniswapV3TokenPairs.sol";
 
 // details about the uniswap position
 struct Position {
@@ -23,9 +24,7 @@ struct Position {
 }
 
 struct MintParams {
-    address token0;
-    address token1;
-    uint24 fee;
+    TokenPair tokenPair;
     int24 tickLower;
     int24 tickUpper;
     uint256 amount0Desired;
@@ -40,7 +39,7 @@ library UniswapV3PositionLib {
     /// @dev Updates position's fee growth and tokens owed
     function updatePositionFeeGrowth(
         Position storage position,
-        IUniswapV3Pool pool,
+        address pool,
         uint128 positionLiquidity
     )
         internal
@@ -55,8 +54,13 @@ library UniswapV3PositionLib {
             position.tickUpper
         );
 
-        (, feeGrowthInside0LastX128, feeGrowthInside1LastX128, , ) = pool
-            .positions(positionKey);
+        (
+            ,
+            feeGrowthInside0LastX128,
+            feeGrowthInside1LastX128,
+            ,
+
+        ) = IUniswapV3Pool(pool).positions(positionKey);
 
         position.tokensOwed0 += uint128(
             FullMath.mulDiv(
