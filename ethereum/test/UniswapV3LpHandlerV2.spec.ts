@@ -69,6 +69,7 @@ describe("UniswapV3LpHandlerV2", function () {
     await setupTokenPair();
 
     // Set permissions for LpManager
+    // @ts-ignore
     await lpManager.connect(deployer).setCaller(await lpHandler.getAddress());
 
     // Mint tokens
@@ -80,12 +81,15 @@ describe("UniswapV3LpHandlerV2", function () {
     // Approve tokens
     await mockToken0
       .connect(liquidityOwner)
+      // @ts-ignore
       .approve(await lpHandler.getAddress(), ethers.MaxUint256);
     await mockToken1
       .connect(liquidityOwner)
+      // @ts-ignore
       .approve(await lpHandler.getAddress(), ethers.MaxUint256);
     await mockWETH
       .connect(liquidityOwner)
+      // @ts-ignore
       .approve(await lpHandler.getAddress(), ethers.MaxUint256);
   });
 
@@ -128,30 +132,36 @@ describe("UniswapV3LpHandlerV2", function () {
   describe("Access Control", function () {
     it("only liquidityOwner can set a new lpManager", async function () {
       await expect(
+        // @ts-ignore
         lpHandler.connect(user).setLpManager(await user.getAddress())
       ).to.be.revertedWithCustomError(lpHandler, "NotLiquidityOwner");
 
       await expect(
+        // @ts-ignore
         lpHandler.connect(liquidityOwner).setLpManager(ethers.ZeroAddress)
       ).to.be.revertedWithCustomError(lpHandler, "InvalidAddress");
 
       await lpHandler
         .connect(liquidityOwner)
+        // @ts-ignore
         .setLpManager(await user.getAddress());
       expect(await lpHandler.lpManager()).to.equal(await user.getAddress());
     });
 
     it("only liquidityOwner can set a new liquidityOwner", async function () {
       await expect(
+        // @ts-ignore
         lpHandler.connect(user).setLiquidityOwner(await user.getAddress())
       ).to.be.revertedWithCustomError(lpHandler, "NotLiquidityOwner");
 
       await expect(
+        // @ts-ignore
         lpHandler.connect(liquidityOwner).setLiquidityOwner(ethers.ZeroAddress)
       ).to.be.revertedWithCustomError(lpHandler, "InvalidAddress");
 
       await lpHandler
         .connect(liquidityOwner)
+        // @ts-ignore
         .setLiquidityOwner(await user.getAddress());
       expect(await lpHandler.liquidityOwner()).to.equal(
         await user.getAddress()
@@ -160,15 +170,18 @@ describe("UniswapV3LpHandlerV2", function () {
 
     it("only liquidityOwner can set a new balancer", async function () {
       await expect(
+        // @ts-ignore
         lpHandler.connect(user).setBalancer(await user.getAddress())
       ).to.be.revertedWithCustomError(lpHandler, "NotLiquidityOwner");
 
       await expect(
+        // @ts-ignore
         lpHandler.connect(liquidityOwner).setBalancer(ethers.ZeroAddress)
       ).to.be.revertedWithCustomError(lpHandler, "InvalidAddress");
 
       await lpHandler
         .connect(liquidityOwner)
+        // @ts-ignore
         .setBalancer(await user.getAddress());
       expect(await lpHandler.balancer()).to.equal(await user.getAddress());
     });
@@ -177,13 +190,16 @@ describe("UniswapV3LpHandlerV2", function () {
   describe("Parameter Settings", function () {
     it("only liquidityOwner can set the protocol fee rate", async function () {
       await expect(
+        // @ts-ignore
         lpHandler.connect(user).setProtocolFeeRate(100)
       ).to.be.revertedWithCustomError(lpHandler, "NotLiquidityOwner");
 
       await expect(
+        // @ts-ignore
         lpHandler.connect(liquidityOwner).setProtocolFeeRate(1001)
       ).to.be.revertedWithCustomError(lpHandler, "RateTooHigh");
 
+      // @ts-ignore
       await lpHandler.connect(liquidityOwner).setProtocolFeeRate(100);
       const params = await lpHandler.operationalParams();
       expect(params.protocolFeeRate).to.equal(100);
@@ -191,13 +207,16 @@ describe("UniswapV3LpHandlerV2", function () {
 
     it("only balancer can set the max mint slippage rate", async function () {
       await expect(
+        // @ts-ignore
         lpHandler.connect(user).setMaxMintSlippageRate(100)
       ).to.be.revertedWithCustomError(lpHandler, "NotBalancer");
 
       await expect(
+        // @ts-ignore
         lpHandler.connect(balancer).setMaxMintSlippageRate(1001)
       ).to.be.revertedWithCustomError(lpHandler, "RateTooHigh");
 
+      // @ts-ignore
       await lpHandler.connect(balancer).setMaxMintSlippageRate(100);
       const params = await lpHandler.operationalParams();
       expect(params.maxMintSlippageRate).to.equal(100);
@@ -205,9 +224,11 @@ describe("UniswapV3LpHandlerV2", function () {
 
     it("only liquidityOwner can set the compound fee flag", async function () {
       await expect(
+        // @ts-ignore
         lpHandler.connect(user).setCompoundFee(false)
       ).to.be.revertedWithCustomError(lpHandler, "NotLiquidityOwner");
 
+      // @ts-ignore
       await lpHandler.connect(liquidityOwner).setCompoundFee(false);
       const params = await lpHandler.operationalParams();
       expect(params.isCompoundFee).to.equal(false);
@@ -222,6 +243,7 @@ describe("UniswapV3LpHandlerV2", function () {
       await expect(
         lpHandler
           .connect(user)
+          // @ts-ignore
           .mint(tokenPairId, -100, 100, amount0, amount1)
       ).to.revertedWithCustomError(lpHandler, "NotLiquidityOwner");
     });
@@ -231,6 +253,7 @@ describe("UniswapV3LpHandlerV2", function () {
       const amount1 = ethers.parseEther("1");
       await lpHandler
         .connect(liquidityOwner)
+        // @ts-ignore
         .mint(tokenPairId, -100, 100, amount0, amount1);
       expect(await mockToken0.balanceOf(await lpHandler.getAddress())).to.equal(
         amount0
