@@ -214,13 +214,9 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         uint256 positionId
     )
         internal
-        returns (
-            TokenPair memory tokenPair,
-            PoolAddress.PoolKey memory poolKey,
-            uint256 amount0,
-            uint256 amount1
-        )
+        returns (TokenPair memory tokenPair, uint256 amount0, uint256 amount1)
     {
+        PoolAddress.PoolKey memory poolKey;
         (poolKey, amount0, amount1) = IUniswapV3LpManager(lpManager)
             .getPoolInfo(positionId);
 
@@ -250,7 +246,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         uint256 amount0Desired,
         uint256 amount1Desired
     ) external payable onlyLiquidityOwner {
-        (TokenPair memory tokenPair, , , ) = _validateTokenPairAndPosition(
+        (TokenPair memory tokenPair, , ) = _validateTokenPairAndPosition(
             positionId
         );
 
@@ -288,7 +284,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         uint256 amount0Min,
         uint256 amount1Min
     ) external payable onlyLiquidityOwner {
-        (TokenPair memory tokenPair, , , ) = _validateTokenPairAndPosition(
+        (TokenPair memory tokenPair, , ) = _validateTokenPairAndPosition(
             positionId
         );
 
@@ -301,8 +297,22 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
                 amount1Min
             );
 
+        amount0 = _adjustAmountByBalance(tokenPair.token0, amount0);
+        amount1 = _adjustAmountByBalance(tokenPair.token1, amount1);
+
         UniswapV3PositionLib.sendTokens(msg.sender, tokenPair.token0, amount0);
         UniswapV3PositionLib.sendTokens(msg.sender, tokenPair.token1, amount1);
+    }
+
+    function _adjustAmountByBalance(
+        address token,
+        uint256 amount
+    ) internal view returns (uint256) {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        if (amount > balance) {
+            amount = balance;
+        }
+        return amount;
     }
 
     /// @notice Collects all the fees associated with provided liquidity
@@ -322,7 +332,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     /// @notice Collects the fees associated with provided liquidity
     /// @param positionId The id of the position to mint in uniswap v3
     function collectAllFees(uint256 positionId) public onlyLiquidityOwner {
-        (TokenPair memory tokenPair, , , ) = _validateTokenPairAndPosition(
+        (TokenPair memory tokenPair, , ) = _validateTokenPairAndPosition(
             positionId
         );
         (uint256 amount0, uint256 amount1) = IUniswapV3LpManager(lpManager)
@@ -374,16 +384,13 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     {
         (
             TokenPair memory tokenPair,
-            PoolAddress.PoolKey memory poolKey,
             uint256 amount0,
             uint256 amount1
         ) = _validateTokenPairAndPosition(params.positionId);
 
         // 1. swap
         _trySwap(
-            poolKey.token0,
-            poolKey.token1,
-            poolKey.fee,
+            tokenPair,
             amount0,
             amount1,
             params.newAmount0,
@@ -424,10 +431,11 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
 
     function collectFeesAndReduceLiquidity(
         uint256 positionId,
+        uint16 percentage,
         uint256 amount0Min,
         uint256 amount1Min
     ) external onlyBalancer {
-        (TokenPair memory tokenPair, , , ) = _validateTokenPairAndPosition(
+        (TokenPair memory tokenPair, , ) = _validateTokenPairAndPosition(
             positionId
         );
         // collect fee
@@ -442,7 +450,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         IUniswapV3LpManager(lpManager).decreaseLiquidity(
             tokenPair.pool,
             positionId,
-            LibPercentageMath.percentage100(),
+            percentage,
             amount0Min,
             amount1Min
         );
@@ -455,9 +463,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     }
 
     function _trySwap(
-        address token0,
-        address token1,
-        uint24 fee,
+        TokenPair memory tokenPair,
         uint256 _reserve0,
         uint256 _reserve1,
         uint256 _target0,
@@ -489,9 +495,9 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         }
 
         _swap(
-            token0,
-            token1,
-            fee,
+            tokenPair.token0,
+            tokenPair.token1,
+            tokenPair.poolFee,
             amountIn,
             amountOutMinimum,
             isToken0ToToken1

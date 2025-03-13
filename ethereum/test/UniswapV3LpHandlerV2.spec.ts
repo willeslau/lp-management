@@ -112,6 +112,20 @@ describe("UniswapV3LpHandlerV2", function () {
     return { sortedToken0, sortedToken1 };
   }
 
+  async function mintNewLiquidity(tokenPairId = 1) {
+    const amount0 = ethers.parseEther("2"); // Increased amount0
+    const amount1 = ethers.parseEther("0.5"); // Decreased amount1
+
+    // Set initial liquidity in the mock pool
+    await mockPool.setLiquidity(ethers.parseEther("10"));
+    await mockPool.setSqrtPriceX96("79228162514264337593543950336"); // 1:1 price
+
+    await lpHandler
+      .connect(liquidityOwner)
+      // @ts-ignore
+      .mint(tokenPairId, -100, 100, amount0, amount1);
+  }
+
   describe("Constructor & Initial State", function () {
     it("should correctly set the initial state", async function () {
       expect(await lpHandler.lpManager()).to.equal(
@@ -249,18 +263,216 @@ describe("UniswapV3LpHandlerV2", function () {
     });
 
     it("should mint new liquidity", async function () {
+      const amount0 = ethers.parseEther("2");
+      const amount1 = ethers.parseEther("0.5");
+      await mintNewLiquidity();
+      expect(await mockToken0.balanceOf(await lpHandler.getAddress())).to.equal(
+        amount1
+      );
+      expect(await mockToken1.balanceOf(await lpHandler.getAddress())).to.equal(
+        amount0
+      );
+    });
+
+    it("should increase liquidity for existing position", async function () {
       const amount0 = ethers.parseEther("1");
       const amount1 = ethers.parseEther("1");
+      const positionId = 1;
+
+      await mintNewLiquidity();
+
+      await expect(
+        lpHandler
+          .connect(user)
+          // @ts-ignore
+          .increaseLiquidity(positionId, amount0, amount1)
+      ).to.be.revertedWithCustomError(lpHandler, "NotLiquidityOwner");
+
       await lpHandler
         .connect(liquidityOwner)
         // @ts-ignore
-        .mint(tokenPairId, -100, 100, amount0, amount1);
+        .increaseLiquidity(positionId, amount0, amount1);
+
       expect(await mockToken0.balanceOf(await lpHandler.getAddress())).to.equal(
-        amount0
+        ethers.parseEther("3")
       );
       expect(await mockToken1.balanceOf(await lpHandler.getAddress())).to.equal(
-        amount1
+        ethers.parseEther("1.5")
       );
+    });
+
+    it("should decrease liquidity for existing position", async function () {
+      const amount0Min = ethers.parseEther("0.5"); // Increased minimum amount
+      const amount1Min = ethers.parseEther("0.5"); // Increased minimum amount
+      const positionId = 1;
+      const percentage = 10; // 50%
+
+      await mintNewLiquidity();
+
+      await expect(
+        lpHandler
+          .connect(user)
+          // @ts-ignore
+          .decreaseLiquidity(positionId, percentage, amount0Min, amount1Min)
+      ).to.be.revertedWithCustomError(lpHandler, "NotLiquidityOwner");
+
+      await lpHandler
+        .connect(liquidityOwner)
+        // @ts-ignore
+        .decreaseLiquidity(positionId, percentage, amount0Min, amount1Min);
+
+      // Check that tokens were transferred back to liquidityOwner
+      expect(
+        await mockToken0.balanceOf(await liquidityOwner.getAddress())
+      ).to.be.gt(0);
+      expect(
+        await mockToken1.balanceOf(await liquidityOwner.getAddress())
+      ).to.be.gt(0);
+    });
+  });
+
+  describe("Fee Management", function () {
+    it("should collect fees for a single position", async function () {
+      const positionId = 1;
+
+      await mintNewLiquidity();
+
+      await expect(
+        lpHandler
+          .connect(user)
+          // @ts-ignore
+          .collectAllFees(positionId)
+      ).to.be.revertedWithCustomError(lpHandler, "NotLiquidityOwner");
+
+      await expect(
+        lpHandler
+          .connect(liquidityOwner)
+          // @ts-ignore
+          .collectAllFees(positionId)
+      ).to.emit(lpHandler, "FeesCollected");
+    });
+
+    it("should collect fees for multiple positions", async function () {
+      const positionIds = [1];
+
+      await mintNewLiquidity();
+
+      await expect(
+        lpHandler
+          .connect(user)
+          // @ts-ignore
+          .batchCollectFees(positionIds)
+      ).to.be.revertedWithCustomError(lpHandler, "NotLiquidityOwner");
+
+      await lpHandler
+        .connect(liquidityOwner)
+        // @ts-ignore
+        .batchCollectFees(positionIds);
+    });
+  });
+
+  describe("Position Rebalancing", function () {
+    it("should rebalance position with new parameters", async function () {
+      const rebalanceParams = {
+        positionId: 1,
+        amount0WithdrawMin: ethers.parseEther("1.1"),
+        amount1WithdrawMin: ethers.parseEther("1.1"),
+        swapSlippage: 50, // 5%
+        newAmount0: ethers.parseEther("2"),
+        newAmount1: ethers.parseEther("2"),
+        tickLower: -100,
+        tickUpper: 100,
+      };
+
+      await mintNewLiquidity();
+
+      // Set mock pool state to enable swapping
+      await mockPool.setLiquidity(ethers.parseEther("100"));
+      await mockPool.setSqrtPriceX96("79228162514264337593543950336"); // 1:1 price
+
+      // Approve tokens for rebalancing
+      await mockToken0
+        .connect(balancer)
+        // @ts-ignore
+        .approve(await lpHandler.getAddress(), ethers.MaxUint256);
+      await mockToken1
+        .connect(balancer)
+        // @ts-ignore
+        .approve(await lpHandler.getAddress(), ethers.MaxUint256);
+
+      // Fund balancer with tokens
+      await mockToken0.mint(await balancer.getAddress(), ethers.parseEther("10"));
+      await mockToken1.mint(await balancer.getAddress(), ethers.parseEther("10"));
+
+      // Collect fees and reduce liquidity first
+      await lpHandler
+        .connect(balancer)
+        // @ts-ignore
+        .collectFeesAndReduceLiquidity(
+          rebalanceParams.positionId,
+          rebalanceParams.swapSlippage,
+          rebalanceParams.amount0WithdrawMin,
+          rebalanceParams.amount1WithdrawMin
+        );
+
+      // Perform rebalance
+      await expect(
+        lpHandler
+          .connect(balancer)
+          // @ts-ignore
+          .rebalance(rebalanceParams)
+      ).to.emit(lpHandler, "PositionRebalanced");
+    });
+
+    it("should collect fees and reduce liquidity", async function () {
+      const positionId = 1;
+      const amount0Min = ethers.parseEther("0.1");
+      const amount1Min = ethers.parseEther("0.1");
+      const swapSlippage = 50;
+
+      await mintNewLiquidity();
+
+      await expect(
+        lpHandler
+          .connect(user)
+          // @ts-ignore
+          .collectFeesAndReduceLiquidity(
+            positionId,
+            swapSlippage,
+            amount0Min,
+            amount1Min
+          )
+      ).to.be.revertedWithCustomError(lpHandler, "NotBalancer");
+
+      await lpHandler
+        .connect(balancer)
+        // @ts-ignore
+        .collectFeesAndReduceLiquidity(
+          positionId,
+          swapSlippage,
+          amount0Min,
+          amount1Min
+        );
+    });
+
+    it("should validate tick range for rebalancing", async function () {
+      const invalidRebalanceParams = {
+        positionId: 1,
+        amount0WithdrawMin: ethers.parseEther("0.1"),
+        amount1WithdrawMin: ethers.parseEther("0.1"),
+        swapSlippage: 50,
+        newAmount0: ethers.parseEther("2"),
+        newAmount1: ethers.parseEther("2"),
+        tickLower: 100,
+        tickUpper: -100, // Invalid: upper tick is less than lower tick
+      };
+
+      await expect(
+        lpHandler
+          .connect(balancer)
+          // @ts-ignore
+          .rebalance(invalidRebalanceParams)
+      ).to.be.revertedWithCustomError(lpHandler, "InvalidTickRange");
     });
   });
 });

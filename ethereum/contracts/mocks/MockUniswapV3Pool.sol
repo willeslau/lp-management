@@ -71,9 +71,21 @@ contract MockUniswapV3Pool is IUniswapV3Pool {
         bytes calldata data
     ) external override returns (int256 amount0, int256 amount1) {
         swapCalled = true;
-
-        amount0 = amountSpecified;
-        amount1 = amountSpecified;
+        
+        if (amountSpecified > 0) {
+            if (zeroForOne) {
+                amount0 = amountSpecified;
+                amount1 = -int256(uint256(amountSpecified) * 990 / 1000); // 0.99 rate for testing
+                IERC20(token1).safeTransfer(recipient, uint256(-amount1));
+                IERC20(token0).safeTransferFrom(msg.sender, address(this), uint256(amount0));
+            } else {
+                amount1 = amountSpecified;
+                amount0 = -int256(uint256(amountSpecified) * 990 / 1000); // 0.99 rate for testing
+                IERC20(token0).safeTransfer(recipient, uint256(-amount0));
+                IERC20(token1).safeTransferFrom(msg.sender, address(this), uint256(amount1));
+            }
+        }
+        return (amount0, amount1);
     }
 
     function uniswapV3MintCallback(
@@ -150,9 +162,11 @@ contract MockUniswapV3Pool is IUniswapV3Pool {
     function burn(
         int24,
         int24,
-        uint128
-    ) external pure override returns (uint256, uint256) {
-        return (0, 0);
+        uint128 amount
+    ) external override returns (uint256, uint256) {
+        uint256 amount0 = uint256(amount);
+        uint256 amount1 = uint256(amount);
+        return (amount0, amount1);
     }
 
     function flash(
@@ -198,7 +212,7 @@ contract MockUniswapV3Pool is IUniswapV3Pool {
         return (0, 0, 0, false);
     }
 
-    function protocolFees() external pure override returns (uint128 token0, uint128 token1) {
+    function protocolFees() external pure override returns (uint128, uint128) {
         return (0, 0);
     }
 
