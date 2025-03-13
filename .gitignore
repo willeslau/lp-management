@@ -2,6 +2,7 @@ ethereum/node_modules
 ethereum/artifacts
 ethereum/cache
 ethereum/typechain-types
+ethereum/.env
 
 analysis/bin
 analysis/include
