@@ -3,90 +3,153 @@ import { Contract, Signer } from 'ethers';
 import { ethers } from 'hardhat';
 import { deployContractWithDeployer } from '../scripts/util';
 
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-const ONE_ADDRESS = "0x0000000000000000000000000000000000000001";
+const REpslon = 0.001;
+
+function ensureRWithinRange(R: number, RNew: number) {
+    expect((RNew - R) / R).to.be.lte(REpslon);
+}
 
 describe('LiquiditySwapV3', () => {
-    let swapCalculator: Contract;
-    let quoter: Contract;
-    let swapCalculatorSwapTester: Contract;
+    let swap: Contract;
+    let pool: Contract;
+    let token: Contract;
 
     beforeEach(async () => {
         const [deployer] = await ethers.getSigners();
         // @ts-ignore
-        quoter = await deployContractWithDeployer(deployer as Signer, 'UniswapV3QuoterTest', [], true);
+        pool = await deployContractWithDeployer(deployer as Signer, 'UniswapV3PoolTest', [], true);
         // @ts-ignore
-        swapCalculator = await deployContractWithDeployer(deployer as Signer, 'LiquiditySwapV3', [await quoter.getAddress()], true);
+        swap = await deployContractWithDeployer(deployer as Signer, 'LiquiditySwapV3', [], true);   
         // @ts-ignore
-        swapCalculatorSwapTester = await deployContractWithDeployer(deployer as Signer, 'UniswapV3LiquiditySwapTest', [await swapCalculator.getAddress()], true);
-    });
+        token = await deployContractWithDeployer(deployer as Signer, 'TestToken', ["T", "T", deployer.address, ethers.parseEther("100000000000")], true)
 
-    it('compute R correctly', async () => {
-        const priceSqrtLow_Q96 = "4192360296907066341452660342784";
-        const priceSqrtCur_Q96 = "4218481174524931107978693574656";
-        const priceSqrtHig_Q96 = "4339505179874779672736325173248";
-
-        const expectedR_Q96 = 49869267033240137919016702592389n;
-
-        const R_Q96 = await swapCalculator.computeR(priceSqrtCur_Q96, priceSqrtLow_Q96, priceSqrtHig_Q96);
-        expect(R_Q96).to.be.eq(expectedR_Q96);
+        await token.approve(await swap.getAddress(), ethers.parseEther("100000000000"));
     });
 
     it('swap token 1 for 0 works R correctly', async () => {
         const liquidity = "1409862032491040733326409";
         const pCurrent = "4551194197074107514614710272";
-        await quoter.setParams(pCurrent, liquidity, false);
+        const R_Q96 = "142246744265321288118042624";
+        await pool.setParams(pCurrent, liquidity);
 
         // token 1 is eth, token 0 is uniswap
+        const zeroForOne = false;
+        const amount0 = ethers.parseEther("1000");
+        const amount1 = ethers.parseEther("20");
+
+        const bytes = await swap.encodePreSwapData(
+            zeroForOne,
+            {
+                amount0,
+                amount1,
+                R_Q96,
+                tokenIn: await token.getAddress(),
+            }
+        );
+
+        const amount0Expected = 3571515538282492507250n;
+        const amount1Expected = -11787109375000000000n;
+        const loopsExpected = 11;
+
         await expect(
-            swapCalculatorSwapTester.calSwapToken1ForToken0(
-                {
-                    poolFee: 0, // not important
-                    token0: ZERO_ADDRESS,
-                    token1: ONE_ADDRESS,
-                    amount0: ethers.parseEther("1000"),
-                    amount1: ethers.parseEther("20"),
-                    sqrtP_Q96: "4551194197074107514614710272",
-                    sqrtPSlippage_Q96: 0, // not important
-                    R_Q96: "142246744265321288118042624"
-                },
+            swap.swapWithSearch1For0(
+                await pool.getAddress(),
+                0, // not important
                 {
                     swapInLow: ethers.parseEther("0"),
                     swapInHigh: ethers.parseEther("20"),
                     searchLoopNum: 20,
-                    REpslon_Q96: "79228162514264339242811392",
-                }
+                },
+                bytes,
             )
         )
-        .to.emit(swapCalculatorSwapTester, 'CalculatedTokenSwap').withArgs(3571515538282492507250n, 11787109375000000000n);
+        // need to reverse the sign as the pool expects sign to be reverse compared to caller
+        .to.emit(swap, 'SwapOk').withArgs(-amount0Expected, -amount1Expected, loopsExpected);
+
+        const newR = Number(amount1 + amount1Expected) / Number(amount0 + amount0Expected);
+        ensureRWithinRange(Number(R_Q96) / 2 ** 96, newR);
     });
 
     it('swap token 0 for 1 works R correctly', async () => {
-        const liquidity = "1409862032491040733326409";
-        const pCurrent = "4551194197074107514614710272";
-        await quoter.setParams(pCurrent, liquidity, true);
+        const liquidity = "1440406078728975522569307";
+        const pCurrent = "4550228513169945223468417024";
+        const R_Q96 = "142246744265321288118042624";
+        await pool.setParams(pCurrent, liquidity);
 
         // token 1 is eth, token 0 is uniswap
+        const zeroForOne = true;
+        const amount0 = ethers.parseEther("1000");
+        const amount1 = ethers.parseEther("0.1");
+
+        const bytes = await swap.encodePreSwapData(
+            zeroForOne,
+            {
+                amount0,
+                amount1,
+                R_Q96,
+                tokenIn: await token.getAddress(),
+            }
+        );
+
+        const amount0Expected = -333007812499999999999n;
+        const amount1Expected = 1098388313632070405n;
+        const loopsExpected = 10;
+
         await expect(
-            swapCalculatorSwapTester.calSwapToken0ForToken1(
-                {
-                    poolFee: 0, // not important
-                    token0: ZERO_ADDRESS,
-                    token1: ONE_ADDRESS,
-                    amount0: ethers.parseEther("1000"),
-                    amount1: ethers.parseEther("0.5"),
-                    sqrtP_Q96: pCurrent,
-                    sqrtPSlippage_Q96: 0, // not important
-                    R_Q96: "142246744265321288118042624"
-                },
+            swap.swapWithSearch0For1(
+                await pool.getAddress(),
+                0, // not important
                 {
                     swapInLow: ethers.parseEther("0"),
                     swapInHigh: ethers.parseEther("1000"),
                     searchLoopNum: 20,
-                    REpslon_Q96: "79228162514264339242811392",
-                }
+                },
+                bytes,
             )
         )
-        .to.emit(swapCalculatorSwapTester, 'CalculatedTokenSwap').withArgs(254394531249999999999n, 839450005002466943n);
+        // need to reverse the sign as the pool expects sign to be reverse compared to caller
+        .to.emit(swap, 'SwapOk').withArgs(-amount0Expected, -amount1Expected, loopsExpected);
+
+        const newR = Number(amount1 + amount1Expected) / Number(amount0 + amount0Expected);
+        ensureRWithinRange(Number(R_Q96) / 2 ** 96, newR);
+    });
+
+    it('callback not allowed', async () => {
+        const bytes = await swap.encodePreSwapData(
+            true,
+            {
+                amount0: ethers.parseEther("1000"),
+                amount1: ethers.parseEther("0.1"),
+                R_Q96: "142246744265321288118042624",
+                tokenIn: await token.getAddress(),
+            }
+        );
+
+        await expect(
+            swap.uniswapV3SwapCallback(
+                ethers.parseEther("0"),
+                ethers.parseEther("1"),
+                bytes,
+            )
+        )
+        .to.revertedWithCustomError(swap, 'NotExpectingCallback');
+    });
+});
+
+describe('LiquiditySwapV3 - Revert Tests', () => {
+    let contract: Contract;
+
+    beforeEach(async () => {
+        const [deployer] = await ethers.getSigners();
+        // @ts-ignore
+        contract = await deployContractWithDeployer(deployer as Signer, 'RevertDataTesting', [], true);
+    });
+
+    it('ok', async () => {
+        await contract.test_Postive();
+        await contract.test_Negative();
+        await contract.test_Zero();
+        await contract.test_MaxPositive();
+        await contract.test_MinNegative();
     });
 });

@@ -1,166 +1,270 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.0;
 
-import {ILiquiditySwapV3, CalculateParams, SearchRange} from "./interfaces/ILiquiditySwap.sol";
+import {ILiquiditySwapV3, SearchRange} from "./interfaces/ILiquiditySwap.sol";
 
-import {IQuoterV2} from '@uniswap/v3-periphery/contracts/interfaces/IQuoterV2.sol';
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
+import {IUniswapV3SwapCallback} from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
 import {FullMath} from "@uniswap/v3-core/contracts/libraries/FullMath.sol";
+import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
 enum CompareResult {
+    BelowRange,
     InRange,
-    AboveRange,
-    BelowRange
+    AboveRange
 }
 
-contract LiquiditySwapV3 is ILiquiditySwapV3 {
+struct SwapCallbackData {
+    bool zeroForOne;
+    bytes preSwapRawBytes;
+}
+
+struct PreSwapParam {
+    uint256 amount0;
+    uint256 amount1;
+    uint160 R_Q96;
+    address tokenIn;
+}
+
+contract LiquiditySwapV3 is ILiquiditySwapV3, IUniswapV3SwapCallback, Ownable {
+    using SafeERC20 for IERC20;
+
+    error SwapOutputInvalid(bool zeroForOne, int256 amount0Delta, int256 amount1Delta);
+    error SwapAmountBothNonPositive(int256 amount0Delta, int256 amount1Delta);
+    error NotExpectingCallbackFrom(address expected, address actual);
+    error NotExpectingCallback(address sender);
+    error ShouldBeNegative(bool zeroForOne, int256 amount0, int256 amount1);
+    error NoSolutionFound(uint8 loops);
+    error SwapReverted(CompareResult r, int256 amount);
+    error InvalidSwapCallbackRevertLength(bytes reason);
+    error InvalidSwapCallbackCompareResult(bytes reason, uint8 r);
+
+    event SwapOk(int256 amount0, int256 amount1, uint8 loops);
+
+
+    // 0.001
+    uint160 constant public REpslon_Q96 = 79228162514264339242811392;
     uint256 constant Q96 = 2**96;
+    uint256 constant CALLBACK_REVERT_LEN = 33;
 
-    IQuoterV2 public quoter;
+    address private expectingPool;
 
-    constructor(address _quoter) {
-        quoter = IQuoterV2(_quoter);
-    }
-
-    /**
-     * @notice Computes the Uniswap V3 ratio R in Q96 form
-     *         R = (sqrtP - sqrtPa) / (1/sqrtP - 1/sqrtPb)
-     *         R = = (sqrtP - sqrtPa) / [(sqrtPb - sqrtP) / (sqrtPb * sqrtP)]
-     *         R = = (sqrtP - sqrtPa) * sqrtPb * sqrtP / (sqrtPb - sqrtP)
-     * @param sqrtP_Q96   current sqrt-price in Q96
-     * @param sqrtPa_Q96  lower bound sqrt-price in Q96
-     * @param sqrtPb_Q96  upper bound sqrt-price in Q96
-     * @return R_Q96 The ratio as a Q96-scaled integer
-     */
-    function computeR(
-        uint160 sqrtP_Q96,
-        uint160 sqrtPa_Q96,
-        uint160 sqrtPb_Q96
-    ) public pure returns (uint256) {
-        if (!(sqrtPa_Q96 <= sqrtP_Q96 && sqrtP_Q96 <= sqrtPb_Q96)) {
-            revert("invalid range");
+    /// @inheritdoc IUniswapV3SwapCallback
+    function uniswapV3SwapCallback(
+        int256 _amount0Delta,
+        int256 _amount1Delta,
+        bytes calldata _data
+    ) external override {
+        if (_amount0Delta <= 0 && _amount1Delta <= 0) {
+            revert SwapAmountBothNonPositive(_amount0Delta, _amount1Delta);
         }
 
-        uint256 tmp = FullMath.mulDiv(sqrtP_Q96, sqrtPb_Q96, Q96);
-        return FullMath.mulDiv(sqrtP_Q96 - sqrtPa_Q96, tmp, sqrtPb_Q96 - sqrtP_Q96);
+        address expectCallFrom = expectingPool;
+
+        if (expectCallFrom == address(0)) {
+            revert NotExpectingCallback(msg.sender);
+        }
+        if (expectCallFrom != msg.sender) {
+            revert NotExpectingCallbackFrom(expectCallFrom, msg.sender);
+        }
+
+        // TODO: switch to use encode packed
+        SwapCallbackData memory data = abi.decode(_data, (SwapCallbackData));
+
+        // reverse the delta signs because from uniswap, the signs are relative to the pool
+        // our calculation is relative to the sender
+        if (data.zeroForOne) {
+            _handleSwapCallback0For1(-_amount0Delta, -_amount1Delta, data.preSwapRawBytes);
+        } else {
+            _handleSwapCallback1For0(-_amount0Delta, -_amount1Delta, data.preSwapRawBytes);
+        }
+
+        // invalidate cache
+        expectCallFrom = address(0);
     }
 
-    function calSwapToken1ForToken0(
-        CalculateParams memory _params,
-        SearchRange calldata _searchRange
-    ) external returns(bool, uint256 amount1In, uint256 amountOut) {
-        uint256 low = _searchRange.swapInLow;
-        uint256 hig = _searchRange.swapInHigh;
+    function encodePreSwapData(bool _zeroForOne, PreSwapParam calldata _payload) external pure returns(bytes memory) {
+        bytes memory inner = abi.encode(_payload);
+        return abi.encode(SwapCallbackData({ zeroForOne: _zeroForOne, preSwapRawBytes: inner}));
+    }
+
+    function swapWithSearch1For0(
+        address _pool,
+        uint160 _sqrtPriceLimitX96,
+        SearchRange calldata _searchRange,
+        bytes calldata _preSwapCalldata
+    ) external onlyOwner {
+        int256 low = _searchRange.swapInLow;
+        int256 hig = _searchRange.swapInHigh;
 
         CompareResult r;
-        
-        for (uint8 i = 0; i < _searchRange.searchLoopNum;) {
+        int256 amount1In;
+        uint8 loops;
+
+        for (loops = 1; loops <= _searchRange.searchLoopNum;) {
             amount1In = low + (hig - low) / 2;
 
-            (r, amountOut) = _swapToken1ForToken0AgainstR(_params, _searchRange, amount1In);
-            
-            if (r == CompareResult.InRange) {
-                return (true, amount1In, amountOut);
-            } else if (r == CompareResult.AboveRange) {
-                low = amount1In + 1 wei; 
-            } else {
-                hig = amount1In - 1 wei;
-                
-            }
+            // set cache in advance
+            expectingPool = _pool;
 
+            try IUniswapV3Pool(_pool).swap(msg.sender, false, amount1In, _sqrtPriceLimitX96, _preSwapCalldata) returns (int256 a0, int256 a1) {
+                // callback handling should have reset the cache
+                emit SwapOk(a0, a1, loops);
+                return;
+            } catch (bytes memory reason) {
+                (r, amount1In) = _decodeSwapRevertData(reason);
+
+                if (r == CompareResult.AboveRange) {
+                    low = amount1In + 1 wei; 
+                } else {
+                    hig = amount1In - 1 wei;
+                }
+            }
             unchecked {
-                i++;
+                loops++;
             }
         }
 
-        // no solution found
-        return (false, 0, 0);
+        revert NoSolutionFound(loops);
     }
 
-    function calSwapToken0ForToken1(
-        CalculateParams memory _params,
-        SearchRange calldata _searchRange
-    ) external returns(bool, uint256 amount0In, uint256 amount1Out) {
-        uint256 low = _searchRange.swapInLow;
-        uint256 hig = _searchRange.swapInHigh;
+    function swapWithSearch0For1(
+        address _pool,
+        uint160 _sqrtPriceLimitX96,
+        SearchRange calldata _searchRange,
+        bytes calldata _preSwapCalldata
+    ) external onlyOwner {
+        int256 low = _searchRange.swapInLow;
+        int256 hig = _searchRange.swapInHigh;
 
+        int256 amount0In;
         CompareResult r;
+        uint8 loops;
 
-        for (uint8 i = 0; i < _searchRange.searchLoopNum;) {
+        for (loops = 1; loops <= _searchRange.searchLoopNum;) {
             amount0In = low + (hig - low) / 2;
 
-            (r, amount1Out) = _swapToken0ForToken1AgainstR(_params, _searchRange, amount0In);
+            // set cache in advance
+            expectingPool = _pool;
 
-            if (r == CompareResult.InRange) {
-                // found the solution
-                return (true, amount0In, amount1Out);
-            } else if (r == CompareResult.AboveRange) {
-                hig = amount0In - 1 wei; 
-            } else {
-                low = amount0In + 1 wei;
+            try IUniswapV3Pool(_pool).swap(msg.sender, true, amount0In, _sqrtPriceLimitX96, _preSwapCalldata)returns (int256 a0, int256 a1) {
+                // callback handling should have reset the cache
+                emit SwapOk(a0, a1, loops);
+                return;
+            } catch (bytes memory reason) {
+                (r, amount0In) = _decodeSwapRevertData(reason);
+
+                if (r == CompareResult.AboveRange) {
+                    hig = amount0In - 1 wei; 
+                } else {
+                    low = amount0In + 1 wei;
+                }
             }
 
             unchecked {
-                i++;
+                loops++;
             }
         }
 
-        // no solution found
-        return (false, 0, 0);
+        revert NoSolutionFound(loops);
     }
 
-    function _swapToken0ForToken1AgainstR(
-        CalculateParams memory _params,
-        SearchRange calldata _searchRange,
-        uint256 _delta0
-    ) internal returns(CompareResult, uint256 amount1Out) {
-        (amount1Out, , ,) = quoter.quoteExactInputSingle(IQuoterV2.QuoteExactInputSingleParams({
-            tokenIn: _params.token0,
-            tokenOut: _params.token1,
-            amountIn: _delta0,
-            fee: _params.poolFee,
-            sqrtPriceLimitX96: _params.sqrtPSlippage_Q96
-        }));
+    function _handleSwapCallback0For1(
+        int256 _amount0Delta,
+        int256 _amount1Delta,
+        bytes memory _data
+    ) internal {
+        if (_amount0Delta > 0 || _amount1Delta < 0) {
+            revert SwapOutputInvalid(true, _amount0Delta, _amount1Delta);
+        }
 
-        return (
-            _isPostSwapROk(_params.amount0 - _delta0, _params.amount1 + amount1Out, _params.R_Q96, _searchRange.REpslon_Q96), 
-            amount1Out
+        PreSwapParam memory preSwapParams = abi.decode(_data, (PreSwapParam));
+        uint256 amount0Delta = uint256(-_amount0Delta);
+
+        CompareResult r = _isPostSwapROk(
+            preSwapParams.amount0 - amount0Delta, 
+            preSwapParams.amount1 + uint256(_amount1Delta),
+            preSwapParams.R_Q96
         );
+
+        if (r == CompareResult.InRange) {
+            IERC20(preSwapParams.tokenIn).safeTransferFrom(owner(), msg.sender, amount0Delta);
+            return;
+        }
+
+        _revertSwapCallback(r, int256(amount0Delta));
     }
 
-    function _swapToken1ForToken0AgainstR(
-        CalculateParams memory _params,
-        SearchRange calldata _searchRange,
-        uint256 _delta1
-    ) internal returns(CompareResult, uint256 amount0Out) {
-        (amount0Out, , ,) = quoter.quoteExactInputSingle(IQuoterV2.QuoteExactInputSingleParams({
-            tokenIn: _params.token1,
-            tokenOut: _params.token0,
-            amountIn: _delta1,
-            fee: _params.poolFee,
-            sqrtPriceLimitX96: _params.sqrtPSlippage_Q96
-        }));
+    function _handleSwapCallback1For0(
+        int256 _amount0Delta,
+        int256 _amount1Delta,
+        bytes memory _data
+    ) internal {
+        if (_amount0Delta < 0 || _amount1Delta > 0) {
+            revert SwapOutputInvalid(false, _amount0Delta, _amount1Delta);
+        }
 
-        return (
-            _isPostSwapROk(_params.amount0 + amount0Out, _params.amount1 - _delta1, _params.R_Q96, _searchRange.REpslon_Q96), 
-            amount0Out
+        PreSwapParam memory preSwapParams = abi.decode(_data, (PreSwapParam));
+        uint256 amount1Delta = uint256(-_amount1Delta);
+
+        CompareResult r = _isPostSwapROk(
+            preSwapParams.amount0 + uint256(_amount0Delta), 
+            preSwapParams.amount1 - amount1Delta,
+            preSwapParams.R_Q96
         );
+
+        if (r == CompareResult.InRange) {
+            IERC20(preSwapParams.tokenIn).safeTransferFrom(owner(), msg.sender, amount1Delta);
+            return;
+        }
+        _revertSwapCallback(r, int256(amount1Delta));
     }
 
-    function _isPostSwapROk(uint256 _newAmount0, uint256 _newAmount1, uint256 _R_Q96, uint256 _REpslon_Q96) internal pure returns (CompareResult) {
+    function _revertSwapCallback(CompareResult _r, int256 _amount) internal pure returns(bytes memory) {
+        assembly {
+            let ptr := mload(0x40)
+            mstore8(ptr, _r)
+            mstore(add(ptr, 0x01), _amount)
+            revert(ptr, CALLBACK_REVERT_LEN)
+        }
+    }
+
+    function _decodeSwapRevertData(bytes memory _revert) internal pure returns(CompareResult r, int256 amount) {
+        if (_revert.length != CALLBACK_REVERT_LEN) {
+            revert InvalidSwapCallbackRevertLength(_revert);
+        }
+        uint8 f;
+        assembly {
+            f := byte(0, mload(add(_revert, 0x20)))
+            amount := mload(add(_revert, 0x21))
+        }
+
+        if (f == 2) {
+            r = CompareResult.AboveRange;
+        } else if (f == 0) {
+            r = CompareResult.BelowRange;
+        } else {
+            revert InvalidSwapCallbackCompareResult(_revert, f);
+        }
+    }
+
+    function _isPostSwapROk(uint256 _newAmount0, uint256 _newAmount1, uint256 _R_Q96) internal pure returns (CompareResult) {
         uint256 r = _divQ96(_newAmount1 * Q96, _newAmount0 * Q96);
-
         uint256 rDelta_Q96 = 0;
 
         if (r < _R_Q96) {
             rDelta_Q96 = _divQ96(_R_Q96 - r, _R_Q96);
-            if (rDelta_Q96 < _REpslon_Q96) {
+            if (rDelta_Q96 < REpslon_Q96) {
                 return CompareResult.InRange;
             }
             return CompareResult.BelowRange;
         }
 
         rDelta_Q96 = _divQ96(r - _R_Q96, _R_Q96);
-        if (rDelta_Q96 < _REpslon_Q96) {
+        if (rDelta_Q96 < REpslon_Q96) {
             return CompareResult.InRange;
         }
         return CompareResult.AboveRange;

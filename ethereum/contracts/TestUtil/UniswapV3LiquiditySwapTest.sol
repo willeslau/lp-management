@@ -1,39 +1,58 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.0;
 
-import {LiquiditySwapV3} from '../UniswapV3LiquiditySwap.sol';
-import {ILiquiditySwapV3, CalculateParams, SearchRange} from "../interfaces/ILiquiditySwap.sol";
+import {LiquiditySwapV3, CompareResult} from '../UniswapV3LiquiditySwap.sol';
+import {ILiquiditySwapV3, SearchRange} from "../interfaces/ILiquiditySwap.sol";
 
-contract UniswapV3LiquiditySwapTest {
-    event CalculatedTokenSwap(uint256 deltaToken0, uint256 deltaToken1);
+interface IUniswapV3LiquidityBytesTest {
+    function revertSwapCallback(CompareResult _r, int256 _amount) external returns(bytes memory);
 
-    ILiquiditySwapV3 public calculator;
+    function decodeSwapRevertData(bytes memory _revert) external returns(CompareResult _r, int256 _amount);
+}
 
-    constructor(address _calculator) {
-        calculator = ILiquiditySwapV3(_calculator);
+contract RevertDataTesting {
+    IUniswapV3LiquidityBytesTest public inner;
+
+    constructor() {
+        inner = IUniswapV3LiquidityBytesTest(address(new UniswapV3LiquidityBytesTest()));
     }
 
-    function calSwapToken1ForToken0(
-        CalculateParams memory _params,
-        SearchRange calldata _searchRange
-    ) external {
-        (bool isOk, uint256 amount1In, uint256 amountOut) = calculator.calSwapToken1ForToken0(_params, _searchRange);
-
-        if (isOk) {
-            emit CalculatedTokenSwap(amountOut, amount1In);
-        }
-        return;
+    function test_Postive() external {
+        _testInner(CompareResult.AboveRange, int256(10));
     }
 
-    function calSwapToken0ForToken1(
-        CalculateParams memory _params,
-        SearchRange calldata _searchRange
-    ) external {
-        (bool isOk, uint256 amount0In, uint256 amountOut) = calculator.calSwapToken0ForToken1(_params, _searchRange);
+    function test_Negative() external {
+        _testInner(CompareResult.AboveRange, int256(-10));
+    }
 
-        if (isOk) {
-            emit CalculatedTokenSwap(amount0In, amountOut);
+    function test_Zero() external {
+        _testInner(CompareResult.AboveRange, int256(0));
+    }
+
+    function test_MaxPositive() external {
+        _testInner(CompareResult.AboveRange, int256(57896044618658097711785492504343953926634992332820282019728792003956564819967));
+    }
+
+    function test_MinNegative() external {
+        _testInner(CompareResult.AboveRange, int256(-57896044618658097711785492504343953926634992332820282019728792003956564819968));
+    }
+
+    function _testInner(CompareResult _r, int256 _amount) internal {
+        try inner.revertSwapCallback(_r, _amount) {}
+        catch(bytes memory reason) {
+            (CompareResult r, int256 amount) = inner.decodeSwapRevertData(reason);
+            require(r == _r, "r not the same");
+            require(amount == _amount, "amount not the same");
         }
-        return;
+    }
+}
+
+contract UniswapV3LiquidityBytesTest is LiquiditySwapV3 {
+    function revertSwapCallback(CompareResult _r, int256 _amount) external pure returns(bytes memory) {
+        _revertSwapCallback(_r, _amount);
+    }
+
+    function decodeSwapRevertData(bytes memory _revert) external pure returns(CompareResult _r, int256 _amount) {
+        return _decodeSwapRevertData(_revert);
     }
 }

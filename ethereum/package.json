@@ -6,7 +6,11 @@
     "compile": "npx hardhat compile",
     "prettier": "prettier --write --plugin=prettier-plugin-solidity 'contracts/**/*.sol'",
     "test-specific": "ENV=unit-test npx hardhat test --grep",
-    "test": "ENV=unit-test npx hardhat test"
+    "test": "ENV=unit-test npx hardhat test",
+
+    "lpSwap::swap1for0Debug": "npx hardhat run scripts/liquiditySwap/swap1for0Debug.ts --network ${NETWORK}",
+    "lpSwap::swap1for0": "npx hardhat run scripts/liquiditySwap/swap1for0.ts --network ${NETWORK}",
+    "lpSwap::deploy": "npx hardhat run scripts/liquiditySwap/deploy.ts --network ${NETWORK}"
   },
   "author": "",
   "license": "ISC",
