@@ -76,13 +76,13 @@ contract MockUniswapV3Pool is IUniswapV3Pool {
             if (zeroForOne) {
                 amount0 = amountSpecified;
                 amount1 = -int256(uint256(amountSpecified) * 990 / 1000); // 0.99 rate for testing
-                IERC20(token1).safeTransfer(recipient, uint256(-amount1));
                 IERC20(token0).safeTransferFrom(msg.sender, address(this), uint256(amount0));
+                IERC20(token1).safeTransfer(recipient, uint256(-amount1));
             } else {
                 amount1 = amountSpecified;
                 amount0 = -int256(uint256(amountSpecified) * 990 / 1000); // 0.99 rate for testing
-                IERC20(token0).safeTransfer(recipient, uint256(-amount0));
                 IERC20(token1).safeTransferFrom(msg.sender, address(this), uint256(amount1));
+                IERC20(token0).safeTransfer(recipient, uint256(-amount0));
             }
         }
         return (amount0, amount1);

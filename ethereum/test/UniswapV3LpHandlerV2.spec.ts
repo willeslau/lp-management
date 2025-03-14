@@ -378,19 +378,19 @@ describe("UniswapV3LpHandlerV2", function () {
         amount0WithdrawMin: ethers.parseEther("1.1"),
         amount1WithdrawMin: ethers.parseEther("1.1"),
         swapSlippage: 50, // 5%
-        newAmount0: ethers.parseEther("2"),
-        newAmount1: ethers.parseEther("2"),
+        newAmount0: ethers.parseEther("6"),  // Increased amount0
+        newAmount1: ethers.parseEther("1"),  // Decreased amount1
         tickLower: -100,
         tickUpper: 100,
       };
 
       await mintNewLiquidity();
 
-      // Set mock pool state to enable swapping
-      await mockPool.setLiquidity(ethers.parseEther("100"));
-      await mockPool.setSqrtPriceX96("79228162514264337593543950336"); // 1:1 price
+      // Mint tokens to balancer
+      await mockToken0.mint(await balancer.getAddress(), ethers.parseEther("20"));
+      await mockToken1.mint(await balancer.getAddress(), ethers.parseEther("20"));
 
-      // Approve tokens for rebalancing
+      // Approve tokens for both pool and handler
       await mockToken0
         .connect(balancer)
         // @ts-ignore
@@ -399,10 +399,18 @@ describe("UniswapV3LpHandlerV2", function () {
         .connect(balancer)
         // @ts-ignore
         .approve(await lpHandler.getAddress(), ethers.MaxUint256);
+      await mockToken0
+        .connect(balancer)
+        // @ts-ignore
+        .approve(await mockPool.getAddress(), ethers.MaxUint256);
+      await mockToken1
+        .connect(balancer)
+        // @ts-ignore
+        .approve(await mockPool.getAddress(), ethers.MaxUint256);
 
-      // Fund balancer with tokens
-      await mockToken0.mint(await balancer.getAddress(), ethers.parseEther("10"));
-      await mockToken1.mint(await balancer.getAddress(), ethers.parseEther("10"));
+      // Set mock pool state to enable swapping
+      await mockPool.setLiquidity(ethers.parseEther("100"));
+      await mockPool.setSqrtPriceX96("79228162514264337593543950336"); // 1:1 price
 
       // Collect fees and reduce liquidity first
       await lpHandler
