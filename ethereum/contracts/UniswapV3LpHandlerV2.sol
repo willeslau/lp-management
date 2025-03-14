@@ -14,15 +14,19 @@ import {IUniswapV3TokenPairs, TokenPair, LibTokenId} from "./interfaces/IUniswap
 import {LibPercentageMath} from "./RateMath.sol";
 import {UniswapV3PositionLib, Position} from "./libraries/UniswapV3PositionLib.sol";
 import "./interfaces/IUniswapV3PositionManager.sol";
-import {ILiquiditySwapV3, SearchRange} from "./interfaces/ILiquiditySwap.sol";
+import {ILiquiditySwapV3, SearchRange, PreSwapParam} from "./interfaces/ILiquiditySwap.sol";
 
 struct RebalanceParams {
-    uint256 positionId;
+    uint8 tokenPairId;
     uint16 sqrtPriceLimitX96;
+
     int24 tickLower;
     int24 tickUpper;
+
+    uint256 amount0;
+    uint256 amount1;
+    
     SearchRange searchRange;
-    bytes preSwapCalldata;
 }
 
 /// @notice The list of parameters for uniswap V3 liquidity operations
@@ -41,31 +45,20 @@ contract UniswapV3LpHandlerV2 {
     using SafeERC20 for IERC20;
     using LibTokenId for uint8;
 
-    error InvalidPositionId(uint256 positionId);
-    error InsufficientLiquidity(uint256 positionId);
     error NotLiquidityOwner(address sender);
     error NotBalancer(address sender);
-    error InvalidTickRange(int24 tickLower, int24 tickUpper);
-    error NotSwapable(
-        uint256 reserve0,
-        uint256 reserve1,
-        uint256 target0,
-        uint256 target1
-    );
     error InvalidAddress();
     error RateTooHigh(uint16 rate);
     error TokenPairIdNotSupported(uint8 tokenPairId);
 
     /// @notice Emitted when a position is rebalanced to a new tick range
     /// @param positionId The ID of the position for which position was rebalanced
-    /// @param liquidity The amount of liquidity in the rebalanced position
     /// @param amount0 The amount of token0 used to create the position
     /// @param amount1 The amount of token1 used to create the position
     /// @param tickLower The new lower tick of the position
     /// @param tickUpper The new upper tick of the position
     event PositionRebalanced(
         uint256 indexed positionId,
-        uint128 liquidity,
         uint256 amount0,
         uint256 amount1,
         int24 tickLower,
@@ -102,13 +95,6 @@ contract UniswapV3LpHandlerV2 {
     modifier onlyBalancer() {
         if (msg.sender != balancer) {
             revert NotBalancer(msg.sender);
-        }
-        _;
-    }
-
-    modifier validateTickRange(int24 _tickLower, int24 _tickUpper) {
-        if (_tickLower >= _tickUpper) {
-            revert InvalidTickRange(_tickLower, _tickUpper);
         }
         _;
     }
@@ -184,14 +170,8 @@ contract UniswapV3LpHandlerV2 {
         external
         payable
         onlyLiquidityOwner
-        validateTickRange(tickLower, tickUpper)
     {
-        TokenPair memory tokenPair = supportedTokenPairs.getTokenPair(
-            tokenPairId
-        );
-        if (!LibTokenId.isValidTokenPairId(tokenPair.id)) {
-            revert TokenPairIdNotSupported(tokenPairId);
-        }
+        TokenPair memory tokenPair = _ensureValidTokenPair(tokenPairId);
 
         _transferFundsAndApprove(tokenPair.token0, amount0);
         _transferFundsAndApprove(tokenPair.token1, amount1);
@@ -298,17 +278,6 @@ contract UniswapV3LpHandlerV2 {
         UniswapV3PositionLib.sendTokens(msg.sender, tokenPair.token1, amount1);
     }
 
-    function _adjustAmountByBalance(
-        address token,
-        uint256 amount
-    ) internal view returns (uint256) {
-        uint256 balance = IERC20(token).balanceOf(address(this));
-        if (amount > balance) {
-            amount = balance;
-        }
-        return amount;
-    }
-
     /// @notice Collects all the fees associated with provided liquidity
     /// @param positionIds The ids of the position to mint in uniswap v3
     function batchCollectFees(
@@ -370,64 +339,103 @@ contract UniswapV3LpHandlerV2 {
         emit FeesCollected(positionId, amount0, amount1);
     }
 
-    function balance1For0(
-        RebalanceParams calldata params
+    function rebalance1For0(
+        RebalanceParams calldata _params
+    ) external onlyBalancer {
+        TokenPair memory tokenPair = _ensureValidTokenPair(_params.tokenPairId);
 
-    ) external {
+        int24 tickCur;
+        {
+            (,tickCur,,,,,) = IUniswapV3Pool(tokenPair.pool).slot0();
+        }
 
-    }
+        PreSwapParam memory swapData = PreSwapParam({
+            amount0: _params.amount0,
+            amount1: _params.amount1,
+            R_Q96: liquiditySwap.computeR(tickCur, _params.tickLower, _params.tickUpper),
+            tokenIn: tokenPair.token1
+        });
 
-    function rebalance(
-        
-    )
-        external
-        onlyBalancer
-        validateTickRange(params.tickLower, params.tickUpper)
-    {
-        (
-            TokenPair memory tokenPair,
-            uint256 amount0,
-            uint256 amount1
-        ) = _validateTokenPairAndPosition(params.positionId);
+        (int256 amount0Delta, int256 amount1Delta) = liquiditySwap
+            .swapWithSearch1For0(
+                tokenPair.pool,
+                _params.sqrtPriceLimitX96,
+                _params.searchRange,
+                liquiditySwap.encodePreSwapData(false, swapData)
+            );
 
-        // 1. swap
-        _trySwap(
-            tokenPair,
-            amount0,
-            amount1,
-            params.newAmount0,
-            params.newAmount1,
-            params.swapSlippage
-        );
+        require(amount0Delta > 0 && amount1Delta < 0, "bug1");
 
-        // 2. add new liquidity
         (
             uint256 positionId,
-            uint128 liquidity,
+            ,
             uint256 amount0Min,
             uint256 amount1Min
         ) = IUniswapV3PositionManager(lpManager).mint(
                 tokenPair,
-                params.tickLower,
-                params.tickUpper,
-                params.newAmount0,
-                params.newAmount1,
+                _params.tickLower,
+                _params.tickUpper,
+                _params.amount0 + uint256(amount0Delta),
+                _params.amount1 - uint256(-amount1Delta),
                 operationalParams.maxMintSlippageRate
             );
 
-        // update position
-        IUniswapV3PositionManager(lpManager).updatePosition(
-            params.positionId,
-            positionId
+        emit PositionRebalanced(
+            positionId,
+            amount0Min,
+            amount1Min,
+            _params.tickLower,
+            _params.tickUpper
         );
+    }
+
+    function rebalance0For1(
+        RebalanceParams calldata _params
+    ) external onlyBalancer {
+        TokenPair memory tokenPair = _ensureValidTokenPair(_params.tokenPairId);
+
+        int24 tickCur;
+        {
+            (,tickCur,,,,,) = IUniswapV3Pool(tokenPair.pool).slot0();
+        }
+
+        PreSwapParam memory swapData = PreSwapParam({
+            amount0: _params.amount0,
+            amount1: _params.amount1,
+            R_Q96: liquiditySwap.computeR(tickCur, _params.tickLower, _params.tickUpper),
+            tokenIn: tokenPair.token0
+        });
+
+        (int256 amount0Delta, int256 amount1Delta) = liquiditySwap
+            .swapWithSearch0For1(
+                tokenPair.pool,
+                _params.sqrtPriceLimitX96,
+                _params.searchRange,
+                liquiditySwap.encodePreSwapData(true, swapData)
+            );
+
+        require(amount0Delta < 0 && amount1Delta > 0, "bug2");
+
+        (
+            uint256 positionId,
+            ,
+            uint256 amount0Min,
+            uint256 amount1Min
+        ) = IUniswapV3PositionManager(lpManager).mint(
+                tokenPair,
+                _params.tickLower,
+                _params.tickUpper,
+                _params.amount0 - uint256(-amount0Delta),
+                _params.amount1 + uint256(amount1Delta),
+                operationalParams.maxMintSlippageRate
+            );
 
         emit PositionRebalanced(
             positionId,
-            liquidity,
             amount0Min,
             amount1Min,
-            params.tickLower,
-            params.tickUpper
+            _params.tickLower,
+            _params.tickUpper
         );
     }
 
@@ -464,48 +472,6 @@ contract UniswapV3LpHandlerV2 {
         return (amount * operationalParams.protocolFeeRate) / 1000;
     }
 
-    function _trySwap(
-        TokenPair memory tokenPair,
-        uint256 _reserve0,
-        uint256 _reserve1,
-        uint256 _target0,
-        uint256 _target1,
-        uint16 _slippage
-    ) internal {
-        uint256 amountOutMinimum;
-        uint256 amountIn;
-        bool isToken0ToToken1;
-
-        if (_reserve0 > _target0 && _reserve1 < _target1) {
-            amountIn = _reserve0 - _target0;
-            amountOutMinimum = UniswapV3PositionLib.calculateAmountOutMinimum(
-                _target1,
-                _reserve1,
-                _slippage
-            );
-            isToken0ToToken1 = true;
-        } else if (_reserve0 < _target0 && _reserve1 > _target1) {
-            amountIn = _reserve1 - _target1;
-            amountOutMinimum = UniswapV3PositionLib.calculateAmountOutMinimum(
-                _target0,
-                _reserve0,
-                _slippage
-            );
-            isToken0ToToken1 = false;
-        } else {
-            revert NotSwapable(_reserve0, _reserve1, _target0, _target1);
-        }
-
-        _swap(
-            tokenPair.token0,
-            tokenPair.token1,
-            tokenPair.poolFee,
-            amountIn,
-            amountOutMinimum,
-            isToken0ToToken1
-        );
-    }
-
     /// @notice Refund the extract amount not provided to the LP pool back to liquidity owner
     function _refund(
         address _token,
@@ -528,5 +494,24 @@ contract UniswapV3LpHandlerV2 {
     ) internal {
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
         IERC20(_token).forceApprove(lpManager, _amount);
+    }
+
+    function _ensureValidTokenPair(uint8 _id) internal view returns(TokenPair memory tokenPair) {
+        tokenPair = supportedTokenPairs.getTokenPair(_id);
+
+        if (!LibTokenId.isValidTokenPairId(tokenPair.id)) {
+            revert TokenPairIdNotSupported(_id);
+        }
+    }
+
+    function _adjustAmountByBalance(
+        address token,
+        uint256 amount
+    ) internal view returns (uint256) {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        if (amount > balance) {
+            amount = balance;
+        }
+        return amount;
     }
 }

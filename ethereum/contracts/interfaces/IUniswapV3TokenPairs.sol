@@ -20,7 +20,7 @@ library LibTokenId {
 
 interface IUniswapV3TokenPairs {
     /// @dev returns the full token pair information by id
-    function getTokenPair(uint8 _id) external returns (TokenPair memory);
+    function getTokenPair(uint8 _id) external view returns (TokenPair memory);
 
     function getTokenPairId(
         address _token0,
