@@ -4,27 +4,25 @@ pragma solidity ^0.8.0;
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-periphery/contracts/libraries/PositionKey.sol";
 import "@uniswap/v3-periphery/contracts/libraries/PoolAddress.sol";
-import "@uniswap/v3-periphery/contracts/base/LiquidityManagement.sol";
 import "@uniswap/v3-periphery/contracts/base/PeripheryImmutableState.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import {LiquiditySwapV3} from "./UniswapV3LiquiditySwap.sol";
 import {IUniswapV3TokenPairs, TokenPair, LibTokenId} from "./interfaces/IUniswapV3TokenPairs.sol";
-import "./UniswapV3SwapPool.sol";
 import {LibPercentageMath} from "./RateMath.sol";
 import {UniswapV3PositionLib, Position} from "./libraries/UniswapV3PositionLib.sol";
-import "./interfaces/IUniswapV3LpManager.sol";
+import {IUniswapV3LpManager} from "./interfaces/IUniswapV3LpManager.sol";
+import {ILiquiditySwapV3, SearchRange} from "./interfaces/ILiquiditySwap.sol";
 
 struct RebalanceParams {
     uint256 positionId;
-    uint256 amount0WithdrawMin;
-    uint256 amount1WithdrawMin;
-    uint16 swapSlippage;
-    uint256 newAmount0;
-    uint256 newAmount1;
+    uint16 sqrtPriceLimitX96;
     int24 tickLower;
     int24 tickUpper;
+    SearchRange searchRange;
+    bytes preSwapCalldata;
 }
 
 /// @notice The list of parameters for uniswap V3 liquidity operations
@@ -39,7 +37,7 @@ struct OperationParams {
 
 /// @title Uniswap V3 Position Manager
 /// @notice Manages Uniswap V3 liquidity positions
-contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
+contract UniswapV3LpHandlerV2 {
     using SafeERC20 for IERC20;
     using LibTokenId for uint8;
 
@@ -91,6 +89,8 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     address public balancer;
     /// @notice The address of LP manager contract that can manage liquidity positions
     address public lpManager;
+    /// @notice Handles the swap of tokens during rebalancing
+    ILiquiditySwapV3 public liquiditySwap;
 
     modifier onlyLiquidityOwner() {
         if (msg.sender != liquidityOwner) {
@@ -116,14 +116,18 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     constructor(
         IUniswapV3TokenPairs _supportedTokenPairs,
         address _lpManager,
+        // deprecated field
         address _factory,
         address _liquidityOwner,
         address _balancer
-    ) UniswapV3SwapPool(_factory) {
+    ) {
         supportedTokenPairs = _supportedTokenPairs;
         lpManager = _lpManager;
         liquidityOwner = _liquidityOwner;
         balancer = _balancer;
+
+        // current contract is the owner of liquidity swap
+        liquiditySwap = ILiquiditySwapV3(address(new LiquiditySwapV3()));
 
         // max slippage is 3%
         operationalParams.maxMintSlippageRate = 30;
@@ -375,8 +379,15 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         emit FeesCollected(positionId, amount0, amount1);
     }
 
-    function rebalance(
+    function balance1For0(
         RebalanceParams calldata params
+
+    ) external {
+
+    }
+
+    function rebalance(
+        
     )
         external
         onlyBalancer
