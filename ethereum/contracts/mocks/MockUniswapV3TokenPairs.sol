@@ -74,7 +74,7 @@ contract MockUniswapV3TokenPairs is IUniswapV3TokenPairs {
 
     function getTokenPair(
         uint8 _id
-    ) external override returns (TokenPair memory) {
+    ) external view override returns (TokenPair memory) {
         return _tokenPairs[_id];
     }
 

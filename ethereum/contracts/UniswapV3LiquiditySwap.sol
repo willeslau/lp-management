@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.0;
 
-import {ILiquiditySwapV3, SearchRange} from "./interfaces/ILiquiditySwap.sol";
+import {ILiquiditySwapV3, SearchRange, PreSwapParam} from "./interfaces/ILiquiditySwap.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -9,6 +9,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {IUniswapV3SwapCallback} from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
 import {FullMath} from "@uniswap/v3-core/contracts/libraries/FullMath.sol";
+import {TickMath} from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
 enum CompareResult {
@@ -20,13 +21,6 @@ enum CompareResult {
 struct SwapCallbackData {
     bool zeroForOne;
     bytes preSwapRawBytes;
-}
-
-struct PreSwapParam {
-    uint256 amount0;
-    uint256 amount1;
-    uint160 R_Q96;
-    address tokenIn;
 }
 
 contract LiquiditySwapV3 is ILiquiditySwapV3, IUniswapV3SwapCallback, Ownable {
@@ -48,6 +42,7 @@ contract LiquiditySwapV3 is ILiquiditySwapV3, IUniswapV3SwapCallback, Ownable {
     // 0.001
     uint160 constant public REpslon_Q96 = 79228162514264339242811392;
     uint256 constant Q96 = 2**96;
+    uint256 constant Q192 = 2**192;
     uint256 constant CALLBACK_REVERT_LEN = 33;
 
     address private expectingPool;
@@ -86,7 +81,17 @@ contract LiquiditySwapV3 is ILiquiditySwapV3, IUniswapV3SwapCallback, Ownable {
         expectCallFrom = address(0);
     }
 
-    function encodePreSwapData(bool _zeroForOne, PreSwapParam calldata _payload) external pure returns(bytes memory) {
+    function computeR(int24 _tickCur, int24 _tickLow, int24 _tickHig) external pure returns(uint160 r) {
+        uint256 pSqrtCur = uint256(TickMath.getSqrtRatioAtTick(_tickCur));
+        uint256 pSqrtLow = uint256(TickMath.getSqrtRatioAtTick(_tickLow));
+        uint256 pSqrtHig = uint256(TickMath.getSqrtRatioAtTick(_tickHig));
+
+        // (P_sqrt - Pa_sqrt) * (Pb_sqrt * P_sqrt / q192) / (Pb_sqrt - P_sqrt)
+        uint256 numerator1 = FullMath.mulDiv(pSqrtHig, pSqrtCur, Q192);
+        return uint160(FullMath.mulDiv(pSqrtCur - pSqrtLow, numerator1, pSqrtHig - pSqrtCur));
+    }
+
+    function encodePreSwapData(bool _zeroForOne, PreSwapParam memory _payload) external pure returns(bytes memory) {
         bytes memory inner = abi.encode(_payload);
         return abi.encode(SwapCallbackData({ zeroForOne: _zeroForOne, preSwapRawBytes: inner}));
     }
@@ -96,7 +101,7 @@ contract LiquiditySwapV3 is ILiquiditySwapV3, IUniswapV3SwapCallback, Ownable {
         uint160 _sqrtPriceLimitX96,
         SearchRange calldata _searchRange,
         bytes calldata _preSwapCalldata
-    ) external onlyOwner {
+    ) external onlyOwner returns (int256 amount0Delta, int256 amount1Delta) {
         int256 low = _searchRange.swapInLow;
         int256 hig = _searchRange.swapInHigh;
 
@@ -113,7 +118,8 @@ contract LiquiditySwapV3 is ILiquiditySwapV3, IUniswapV3SwapCallback, Ownable {
             try IUniswapV3Pool(_pool).swap(msg.sender, false, amount1In, _sqrtPriceLimitX96, _preSwapCalldata) returns (int256 a0, int256 a1) {
                 // callback handling should have reset the cache
                 emit SwapOk(a0, a1, loops);
-                return;
+                // reverse the sign as uniswap is respective to the pool and here we are respective to the owner
+                return (-a0, -a1);
             } catch (bytes memory reason) {
                 (r, amount1In) = _decodeSwapRevertData(reason);
 
@@ -136,7 +142,7 @@ contract LiquiditySwapV3 is ILiquiditySwapV3, IUniswapV3SwapCallback, Ownable {
         uint160 _sqrtPriceLimitX96,
         SearchRange calldata _searchRange,
         bytes calldata _preSwapCalldata
-    ) external onlyOwner {
+    ) external onlyOwner returns (int256 amount0Delta, int256 amount1Delta) {
         int256 low = _searchRange.swapInLow;
         int256 hig = _searchRange.swapInHigh;
 
@@ -153,7 +159,8 @@ contract LiquiditySwapV3 is ILiquiditySwapV3, IUniswapV3SwapCallback, Ownable {
             try IUniswapV3Pool(_pool).swap(msg.sender, true, amount0In, _sqrtPriceLimitX96, _preSwapCalldata)returns (int256 a0, int256 a1) {
                 // callback handling should have reset the cache
                 emit SwapOk(a0, a1, loops);
-                return;
+                // reverse the sign as uniswap is respective to the pool and here we are respective to the owner
+                return (-a0, -a1);
             } catch (bytes memory reason) {
                 (r, amount0In) = _decodeSwapRevertData(reason);
 

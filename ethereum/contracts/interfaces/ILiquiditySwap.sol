@@ -7,20 +7,31 @@ struct SearchRange {
     uint8 searchLoopNum;
 }
 
+struct PreSwapParam {
+    uint256 amount0;
+    uint256 amount1;
+    uint160 R_Q96;
+    address tokenIn;
+}
+
 /// @notice The utility contract to calculate how much tokens to swap for a liquidity pool
 ///         during rebalance for uniswap V3
 interface ILiquiditySwapV3 {
+    function computeR(int24 _tickCur, int24 _tickLow, int24 _tickHig) external pure returns(uint160 r);
+
+    function encodePreSwapData(bool _zeroForOne, PreSwapParam memory _payload) external returns(bytes memory);
+
     function swapWithSearch1For0(
         address _pool,
         uint160 _sqrtPriceLimitX96,
         SearchRange calldata _searchRange,
         bytes calldata _preSwapCalldata
-    ) external;
+    ) external returns (int256 amount0Delta, int256 amount1Delta);
 
     function swapWithSearch0For1(
         address _pool,
         uint160 _sqrtPriceLimitX96,
         SearchRange calldata _searchRange,
         bytes calldata _preSwapCalldata
-    ) external ;
+    ) external returns (int256 amount0Delta, int256 amount1Delta);
 }
