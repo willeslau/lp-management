@@ -7,24 +7,25 @@ import "@uniswap/v3-periphery/contracts/libraries/PoolAddress.sol";
 import "@uniswap/v3-periphery/contracts/base/PeripheryImmutableState.sol";
 
 import {LibPercentageMath} from "./RateMath.sol";
+import {IUniswapV3TokenPairs, TokenPair} from "./interfaces/IUniswapV3TokenPairs.sol";
 import {UniswapV3PositionLib, Position, MintParams} from "./libraries/UniswapV3PositionLib.sol";
-import "./interfaces/IUniswapV3LpManager.sol";
+import "./interfaces/IUniswapV3PositionManager.sol";
 import "./UniswapV3LiquidityManagement.sol";
 import "./Callable.sol";
 
 /// @title Uniswap V3 Position Manager
 /// @notice Manages Uniswap V3 liquidity positions
 /// copy from https://github.com/Uniswap/v3-periphery/blob/0.8/contracts/NonfungiblePositionManager.sol
-contract UniswapV3LpManager is
+contract UniswapV3PositionManager is
     UniswapV3LiquidityManagement,
-    IUniswapV3LpManager,
+    IUniswapV3PositionManager,
     Callable
 {
     /// @dev IDs of pools assigned by this contract
     mapping(address => uint80) private _poolIds;
 
-    /// @dev Pool keys by pool ID, to save on SSTOREs for position data
-    mapping(uint80 => PoolAddress.PoolKey) private _poolIdToPoolKey;
+    /// @dev TokenPairs by pool ID, to save on SSTOREs for position data
+    mapping(uint80 => TokenPair) private _poolIdToTokenPair;
 
     /// @dev The token ID position data
     mapping(uint256 => Position) private _positions;
@@ -40,14 +41,14 @@ contract UniswapV3LpManager is
     ) PeripheryImmutableState(_factory, _WETH9) Callable(msg.sender) {}
 
     /// @dev Caches a pool key
-    function cachePoolKey(
+    function cacheTokenPair(
         address pool,
-        PoolAddress.PoolKey memory poolKey
+        TokenPair memory tokenPair
     ) private returns (uint80 poolId) {
         poolId = _poolIds[pool];
         if (poolId == 0) {
             _poolIds[pool] = (poolId = _nextPoolId++);
-            _poolIdToPoolKey[poolId] = poolKey;
+            _poolIdToTokenPair[poolId] = tokenPair;
         }
     }
 
@@ -76,11 +77,7 @@ contract UniswapV3LpManager is
         external
         view
         override
-        returns (
-            PoolAddress.PoolKey memory poolKey,
-            uint256 amount0,
-            uint256 amount1
-        )
+        returns (TokenPair memory tokenPair, uint256 amount0, uint256 amount1)
     {
         Position storage position = _positions[positionId];
         if (position.poolId == 0) {
@@ -92,7 +89,7 @@ contract UniswapV3LpManager is
         }
         amount0 = position.tokensOwed0;
         amount1 = position.tokensOwed1;
-        poolKey = _poolIdToPoolKey[position.poolId];
+        tokenPair = _poolIdToTokenPair[position.poolId];
     }
 
     function mint(
@@ -155,14 +152,7 @@ contract UniswapV3LpManager is
 
         ) = pool.positions(positionKey);
 
-        uint80 poolId = cachePoolKey(
-            address(pool),
-            PoolAddress.PoolKey({
-                token0: params.tokenPair.token0,
-                token1: params.tokenPair.token1,
-                fee: params.tokenPair.poolFee
-            })
-        );
+        uint80 poolId = cacheTokenPair(address(pool), params.tokenPair);
 
         UniswapV3PositionLib.createPosition(
             _positions,

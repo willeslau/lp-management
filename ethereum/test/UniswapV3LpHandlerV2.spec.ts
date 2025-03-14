@@ -47,7 +47,7 @@ describe("UniswapV3LpHandlerV2", function () {
     // Deploy LP Manager contract
     lpManager = await deployContractWithDeployer(
       deployer,
-      "UniswapV3LpManager",
+      "UniswapV3PositionManager",
       [await mockPool.getAddress(), await mockWETH.getAddress()],
       false
     );
