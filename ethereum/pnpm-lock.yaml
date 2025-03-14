@@ -59,6 +59,9 @@ importers:
       chai:
         specifier: ^4.3.6
         version: 4.5.0
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.4.7
       ethereum-waffle:
         specifier: ^3.4.4
         version: 3.4.4(bufferutil@4.0.9)(encoding@0.1.13)(typescript@5.8.2)(utf-8-validate@5.0.10)
@@ -1692,6 +1695,10 @@ packages:
 
   dom-walk@0.1.2:
     resolution: {integrity: sha512-6QvTW9mrGeIegrFXdtQi9pk7O/nSK6lSdXW2eqUspN5LWD7UTji2Fqw5V2YLjBpHEoU9Xl/eUWNpDeZvoyOv2w==}
+
+  dotenv@16.4.7:
+    resolution: {integrity: sha512-47qPchRCykZC03FhkYAhrvwU4xDBFIj1QPqaarj6mdM/hgUzfPHcpkHJOn3mJAufFeeAxAzeGsr5X0M4k6fLZQ==}
+    engines: {node: '>=12'}
 
   dotignore@0.1.2:
     resolution: {integrity: sha512-UGGGWfSauusaVJC+8fgV+NVvBXkCTmVv7sk6nojDZZvuOUNGUy0Zk4UpHQD6EDjS0jpBwcACvH4eofvyzBcRDw==}
@@ -7177,6 +7184,8 @@ snapshots:
       path-type: 4.0.0
 
   dom-walk@0.1.2: {}
+
+  dotenv@16.4.7: {}
 
   dotignore@0.1.2:
     dependencies:

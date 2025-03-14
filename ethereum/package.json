@@ -7,7 +7,6 @@
     "prettier": "prettier --write --plugin=prettier-plugin-solidity 'contracts/**/*.sol'",
     "test-specific": "ENV=unit-test npx hardhat test --grep",
     "test": "ENV=unit-test npx hardhat test",
-
     "lpSwap::swap1for0Debug": "npx hardhat run scripts/liquiditySwap/swap1for0Debug.ts --network ${NETWORK}",
     "lpSwap::swap1for0": "npx hardhat run scripts/liquiditySwap/swap1for0.ts --network ${NETWORK}",
     "lpSwap::deploy": "npx hardhat run scripts/liquiditySwap/deploy.ts --network ${NETWORK}"
@@ -32,6 +31,7 @@
     "@uniswap/v3-core": "https://github.com/Uniswap/v3-core.git#0.8",
     "@uniswap/v3-periphery": "https://github.com/Uniswap/v3-periphery.git#0.8",
     "chai": "^4.3.6",
+    "dotenv": "^16.4.7",
     "ethereum-waffle": "^3.4.4",
     "ethers": "^6.13.5",
     "hardhat": "^2.9.9",
