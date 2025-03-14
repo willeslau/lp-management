@@ -15,7 +15,7 @@ import "./Callable.sol";
 /// @title Uniswap V3 Position Manager
 /// @notice Manages Uniswap V3 liquidity positions
 /// copy from https://github.com/Uniswap/v3-periphery/blob/0.8/contracts/NonfungiblePositionManager.sol
-contract UniswapV3LpManager is
+contract UniswapV3PositionManager is
     UniswapV3LiquidityManagement,
     IUniswapV3LpManager,
     Callable
