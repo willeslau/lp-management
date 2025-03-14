@@ -97,6 +97,11 @@ contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
         return _id > 0 && _id < _nextPairId;
     }
 
+    // @dev: Support pool address validation
+    // @notice: TODO - Add pool address validation logic to verify:
+    // 1. Pool exists on Uniswap V3
+    // 2. Pool matches the token pair and fee
+    // 3. Pool is initialized and active
     function _validateTokenPair(
         address pool,
         address token0,
