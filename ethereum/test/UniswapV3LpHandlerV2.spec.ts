@@ -28,7 +28,7 @@ describe("UniswapV3LpHandlerV2", function () {
 
     supportedTokenPairs = await deployContractWithDeployer(
       deployer,
-      "MockUniswapV3TokenPairs",
+      "UniswapV3TokenPairs",
       [],
       false
     );
