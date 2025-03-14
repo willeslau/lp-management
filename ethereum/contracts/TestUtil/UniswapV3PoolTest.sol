@@ -5,7 +5,7 @@ import {SqrtPriceMath} from "@uniswap/v3-core/contracts/libraries/SqrtPriceMath.
 import {IUniswapV3SwapCallback} from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
 
 contract UniswapV3PoolTest {
-    uint256 constant Q96 = 2**96;
+    uint256 constant Q96 = 2 ** 96;
 
     uint160 public pCurrentSqrt_Q96;
     uint128 public liquidity;
@@ -22,14 +22,37 @@ contract UniswapV3PoolTest {
         uint160,
         bytes calldata data
     ) external returns (int256 amount0, int256 amount1) {
-        uint160 nextPrice_Q96 = SqrtPriceMath.getNextSqrtPriceFromInput(pCurrentSqrt_Q96, liquidity, uint256(amountSpecified), zeroForOne);
+        uint160 nextPrice_Q96 = SqrtPriceMath.getNextSqrtPriceFromInput(
+            pCurrentSqrt_Q96,
+            liquidity,
+            uint256(amountSpecified),
+            zeroForOne
+        );
         if (zeroForOne) {
-            amount1 = -int256(SqrtPriceMath.getAmount1Delta(nextPrice_Q96, pCurrentSqrt_Q96, liquidity, false));
+            amount1 = -int256(
+                SqrtPriceMath.getAmount1Delta(
+                    nextPrice_Q96,
+                    pCurrentSqrt_Q96,
+                    liquidity,
+                    false
+                )
+            );
             amount0 = amountSpecified;
         } else {
-            amount0 = -int256(SqrtPriceMath.getAmount0Delta(nextPrice_Q96, pCurrentSqrt_Q96, liquidity, false));
+            amount0 = -int256(
+                SqrtPriceMath.getAmount0Delta(
+                    nextPrice_Q96,
+                    pCurrentSqrt_Q96,
+                    liquidity,
+                    false
+                )
+            );
             amount1 = amountSpecified;
         }
-        IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(amount0, amount1, data);
+        IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(
+            amount0,
+            amount1,
+            data
+        );
     }
 }

@@ -32,7 +32,11 @@ struct PreSwapParam {
 contract LiquiditySwapV3Debug is IUniswapV3SwapCallback, Ownable {
     using SafeERC20 for IERC20;
 
-    error SwapOutputInvalid(bool zeroForOne, int256 amount0Delta, int256 amount1Delta);
+    error SwapOutputInvalid(
+        bool zeroForOne,
+        int256 amount0Delta,
+        int256 amount1Delta
+    );
     error SwapAmountBothNonPositive(int256 amount0Delta, int256 amount1Delta);
     error NotExpectingCallbackFrom(address expected, address actual);
     error NotExpectingCallback(address sender);
@@ -41,15 +45,15 @@ contract LiquiditySwapV3Debug is IUniswapV3SwapCallback, Ownable {
     error SwapReverted(CompareResult r, int256 amount);
     error InvalidSwapCallbackRevertLength(bytes reason);
     error InvalidSwapCallbackCompareResult(bytes reason, uint8 r);
-    
+
     error RevertInCallback(int256 amount0Delta, int256 amount1Delta);
 
     event SwapOk(int256 amount0, int256 amount1, uint8 loops);
     event RevertCatch(CompareResult r, int256 amount1);
 
     // 0.001
-    uint160 constant public REpslon_Q96 = 79228162514264339242811392;
-    uint256 constant Q96 = 2**96;
+    uint160 public constant REpslon_Q96 = 79228162514264339242811392;
+    uint256 constant Q96 = 2 ** 96;
     uint256 constant CALLBACK_REVERT_LEN = 33;
 
     address private expectingPool;
@@ -71,8 +75,12 @@ contract LiquiditySwapV3Debug is IUniswapV3SwapCallback, Ownable {
         SwapCallbackData memory data = abi.decode(_data, (SwapCallbackData));
 
         require(!data.zeroForOne, "d");
-        
-        _handleSwapCallback1For0(-_amount0Delta, -_amount1Delta, data.preSwapRawBytes);
+
+        _handleSwapCallback1For0(
+            -_amount0Delta,
+            -_amount1Delta,
+            data.preSwapRawBytes
+        );
 
         // invalidate cache
         expectCallFrom = address(0);
@@ -107,15 +115,23 @@ contract LiquiditySwapV3Debug is IUniswapV3SwapCallback, Ownable {
         CompareResult r;
         int256 amount0In;
 
-        try IUniswapV3Pool(_pool).swap(msg.sender, false, amount1In, _sqrtPriceLimitX96, _preSwapCalldata) returns (int256 a0, int256 a1) {
+        try
+            IUniswapV3Pool(_pool).swap(
+                msg.sender,
+                false,
+                amount1In,
+                _sqrtPriceLimitX96,
+                _preSwapCalldata
+            )
+        returns (int256 a0, int256 a1) {
             // callback handling should have reset the cache
             emit SwapOk(a0, a1, 0);
             return;
         } catch (bytes memory reason) {
             (r, amount0In) = _decodeSwapRevertData(reason);
-            
+
             // if (r == CompareResult.AboveRange) {
-            //     int256 hig = amount0In - 1 wei; 
+            //     int256 hig = amount0In - 1 wei;
             // } else {
             //     int256 low = amount0In + 1 wei;
             // }
@@ -137,7 +153,7 @@ contract LiquiditySwapV3Debug is IUniswapV3SwapCallback, Ownable {
     //     uint256 amount0Delta = uint256(-_amount0Delta);
 
     //     CompareResult r = _isPostSwapROk(
-    //         preSwapParams.amount0 - amount0Delta, 
+    //         preSwapParams.amount0 - amount0Delta,
     //         preSwapParams.amount1 + uint256(_amount1Delta),
     //         preSwapParams.R_Q96
     //     );
@@ -163,7 +179,7 @@ contract LiquiditySwapV3Debug is IUniswapV3SwapCallback, Ownable {
     //     uint256 amount1Delta = uint256(-_amount1Delta);
 
     //     CompareResult r = _isPostSwapROk(
-    //         preSwapParams.amount0 + uint256(_amount0Delta), 
+    //         preSwapParams.amount0 + uint256(_amount0Delta),
     //         preSwapParams.amount1 - amount1Delta,
     //         preSwapParams.R_Q96
     //     );
@@ -175,7 +191,10 @@ contract LiquiditySwapV3Debug is IUniswapV3SwapCallback, Ownable {
     //     _revertSwapCallback(r, int256(amount1Delta));
     // }
 
-    function _revertSwapCallback(CompareResult _r, int256 _amount) internal pure returns(bytes memory) {
+    function _revertSwapCallback(
+        CompareResult _r,
+        int256 _amount
+    ) internal pure returns (bytes memory) {
         assembly {
             let ptr := mload(0x40)
             mstore8(ptr, _r)
@@ -184,7 +203,9 @@ contract LiquiditySwapV3Debug is IUniswapV3SwapCallback, Ownable {
         }
     }
 
-    function _decodeSwapRevertData(bytes memory _revert) internal pure returns(CompareResult r, int256 amount) {
+    function _decodeSwapRevertData(
+        bytes memory _revert
+    ) internal pure returns (CompareResult r, int256 amount) {
         require(_revert.length == CALLBACK_REVERT_LEN, "LS: 1");
 
         uint8 f;

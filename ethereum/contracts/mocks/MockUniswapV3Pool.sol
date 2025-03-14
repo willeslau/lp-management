@@ -59,7 +59,11 @@ contract MockUniswapV3Pool is IUniswapV3Pool {
         return (sqrtPriceX96, tick, 0, 0, 0, 0, false);
     }
 
-    function getPool(address, address, uint24) external view returns (address pool) {
+    function getPool(
+        address,
+        address,
+        uint24
+    ) external view returns (address pool) {
         return address(this);
     }
 
@@ -71,17 +75,25 @@ contract MockUniswapV3Pool is IUniswapV3Pool {
         bytes calldata data
     ) external override returns (int256 amount0, int256 amount1) {
         swapCalled = true;
-        
+
         if (amountSpecified > 0) {
             if (zeroForOne) {
                 amount0 = amountSpecified;
-                amount1 = -int256(uint256(amountSpecified) * 990 / 1000); // 0.99 rate for testing
-                IERC20(token0).safeTransferFrom(msg.sender, address(this), uint256(amount0));
+                amount1 = -int256((uint256(amountSpecified) * 990) / 1000); // 0.99 rate for testing
+                IERC20(token0).safeTransferFrom(
+                    msg.sender,
+                    address(this),
+                    uint256(amount0)
+                );
                 IERC20(token1).safeTransfer(recipient, uint256(-amount1));
             } else {
                 amount1 = amountSpecified;
-                amount0 = -int256(uint256(amountSpecified) * 990 / 1000); // 0.99 rate for testing
-                IERC20(token1).safeTransferFrom(msg.sender, address(this), uint256(amount1));
+                amount0 = -int256((uint256(amountSpecified) * 990) / 1000); // 0.99 rate for testing
+                IERC20(token1).safeTransferFrom(
+                    msg.sender,
+                    address(this),
+                    uint256(amount1)
+                );
                 IERC20(token0).safeTransfer(recipient, uint256(-amount0));
             }
         }
@@ -94,10 +106,18 @@ contract MockUniswapV3Pool is IUniswapV3Pool {
         bytes calldata data
     ) external {
         if (amount0Owed > 0) {
-            IERC20(token0).safeTransferFrom(msg.sender, address(this), amount0Owed);
+            IERC20(token0).safeTransferFrom(
+                msg.sender,
+                address(this),
+                amount0Owed
+            );
         }
         if (amount1Owed > 0) {
-            IERC20(token1).safeTransferFrom(msg.sender, address(this), amount1Owed);
+            IERC20(token1).safeTransferFrom(
+                msg.sender,
+                address(this),
+                amount1Owed
+            );
         }
     }
 
@@ -107,10 +127,18 @@ contract MockUniswapV3Pool is IUniswapV3Pool {
         bytes calldata data
     ) external {
         if (amount0Delta > 0) {
-            IERC20(token0).safeTransferFrom(msg.sender, address(this), uint256(amount0Delta));
+            IERC20(token0).safeTransferFrom(
+                msg.sender,
+                address(this),
+                uint256(amount0Delta)
+            );
         }
         if (amount1Delta > 0) {
-            IERC20(token1).safeTransferFrom(msg.sender, address(this), uint256(amount1Delta));
+            IERC20(token1).safeTransferFrom(
+                msg.sender,
+                address(this),
+                uint256(amount1Delta)
+            );
         }
     }
 
@@ -126,7 +154,9 @@ contract MockUniswapV3Pool is IUniswapV3Pool {
         return (amount0, amount1);
     }
 
-    function positions(bytes32 key)
+    function positions(
+        bytes32 key
+    )
         external
         view
         override
@@ -141,11 +171,15 @@ contract MockUniswapV3Pool is IUniswapV3Pool {
         return (liquidity, 0, 0, 0, 0);
     }
 
-    function observe(uint32[] calldata) external pure override returns (int56[] memory, uint160[] memory) {
+    function observe(
+        uint32[] calldata
+    ) external pure override returns (int56[] memory, uint160[] memory) {
         return (new int56[](0), new uint160[](0));
     }
 
-    function increaseObservationCardinalityNext(uint16) external pure override {}
+    function increaseObservationCardinalityNext(
+        uint16
+    ) external pure override {}
 
     function initialize(uint160) external pure override {}
 
@@ -198,7 +232,9 @@ contract MockUniswapV3Pool is IUniswapV3Pool {
         return type(uint128).max;
     }
 
-    function observations(uint256)
+    function observations(
+        uint256
+    )
         external
         pure
         override
@@ -236,7 +272,9 @@ contract MockUniswapV3Pool is IUniswapV3Pool {
         return 0;
     }
 
-    function ticks(int24)
+    function ticks(
+        int24
+    )
         external
         pure
         override
