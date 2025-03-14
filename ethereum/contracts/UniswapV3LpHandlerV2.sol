@@ -4,27 +4,26 @@ pragma solidity ^0.8.0;
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-periphery/contracts/libraries/PositionKey.sol";
 import "@uniswap/v3-periphery/contracts/libraries/PoolAddress.sol";
-import "@uniswap/v3-periphery/contracts/base/LiquidityManagement.sol";
 import "@uniswap/v3-periphery/contracts/base/PeripheryImmutableState.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import {LiquiditySwapV3} from "./UniswapV3LiquiditySwap.sol";
 import {IUniswapV3TokenPairs, TokenPair, LibTokenId} from "./interfaces/IUniswapV3TokenPairs.sol";
-import "./UniswapV3SwapPool.sol";
 import {LibPercentageMath} from "./RateMath.sol";
 import {UniswapV3PositionLib, Position} from "./libraries/UniswapV3PositionLib.sol";
-import "./interfaces/IUniswapV3LpManager.sol";
+import {ILiquiditySwapV3, SearchRange} from "./interfaces/ILiquiditySwap.sol";
+
+import "./interfaces/IUniswapV3PositionManager.sol";
 
 struct RebalanceParams {
     uint256 positionId;
-    uint256 amount0WithdrawMin;
-    uint256 amount1WithdrawMin;
-    uint16 swapSlippage;
-    uint256 newAmount0;
-    uint256 newAmount1;
+    uint16 sqrtPriceLimitX96;
     int24 tickLower;
     int24 tickUpper;
+    SearchRange searchRange;
+    bytes preSwapCalldata;
 }
 
 /// @notice The list of parameters for uniswap V3 liquidity operations
@@ -39,7 +38,7 @@ struct OperationParams {
 
 /// @title Uniswap V3 Position Manager
 /// @notice Manages Uniswap V3 liquidity positions
-contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
+contract UniswapV3LpHandlerV2 {
     using SafeERC20 for IERC20;
     using LibTokenId for uint8;
 
@@ -91,6 +90,8 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     address public balancer;
     /// @notice The address of LP manager contract that can manage liquidity positions
     address public lpManager;
+    /// @notice Handles the swap of tokens during rebalancing
+    ILiquiditySwapV3 public liquiditySwap;
 
     modifier onlyLiquidityOwner() {
         if (msg.sender != liquidityOwner) {
@@ -116,14 +117,18 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
     constructor(
         IUniswapV3TokenPairs _supportedTokenPairs,
         address _lpManager,
+        // deprecated field
         address _factory,
         address _liquidityOwner,
         address _balancer
-    ) UniswapV3SwapPool(_factory) {
+    ) {
         supportedTokenPairs = _supportedTokenPairs;
         lpManager = _lpManager;
         liquidityOwner = _liquidityOwner;
         balancer = _balancer;
+
+        // current contract is the owner of liquidity swap
+        liquiditySwap = ILiquiditySwapV3(address(new LiquiditySwapV3()));
 
         // max slippage is 3%
         operationalParams.maxMintSlippageRate = 30;
@@ -197,7 +202,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
             ,
             uint256 amount0Minted,
             uint256 amount1Minted
-        ) = IUniswapV3LpManager(lpManager).mint(
+        ) = IUniswapV3PositionManager(lpManager).mint(
                 tokenPair,
                 tickLower,
                 tickUpper,
@@ -214,30 +219,17 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         uint256 positionId
     )
         internal
+        view
         returns (TokenPair memory tokenPair, uint256 amount0, uint256 amount1)
     {
-        PoolAddress.PoolKey memory poolKey;
-        (poolKey, amount0, amount1) = IUniswapV3LpManager(lpManager)
+        (tokenPair, amount0, amount1) = IUniswapV3PositionManager(lpManager)
             .getPoolInfo(positionId);
 
-        uint8 tokenPairId = supportedTokenPairs.getTokenPairId(
-            poolKey.token0,
-            poolKey.token1
-        );
-
-        tokenPair = supportedTokenPairs.getTokenPair(tokenPairId);
         if (
             !LibTokenId.isValidTokenPairId(tokenPair.id) ||
             tokenPair.pool == address(0)
         ) {
-            revert TokenPairIdNotSupported(tokenPairId);
-        }
-
-        if (
-            poolKey.token0 != tokenPair.token0 ||
-            poolKey.token1 != tokenPair.token1
-        ) {
-            revert InvalidPositionId(positionId);
+            revert TokenPairIdNotSupported(tokenPair.id);
         }
     }
 
@@ -263,9 +255,11 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
             maxMintSlippageRate
         );
 
-        (, uint256 amount0Minted, uint256 amount1Minted) = IUniswapV3LpManager(
-            lpManager
-        ).increaseLiquidity(
+        (
+            ,
+            uint256 amount0Minted,
+            uint256 amount1Minted
+        ) = IUniswapV3PositionManager(lpManager).increaseLiquidity(
                 tokenPair,
                 positionId,
                 amount0Desired,
@@ -288,8 +282,9 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
             positionId
         );
 
-        (uint256 amount0, uint256 amount1) = IUniswapV3LpManager(lpManager)
-            .decreaseLiquidity(
+        (uint256 amount0, uint256 amount1) = IUniswapV3PositionManager(
+            lpManager
+        ).decreaseLiquidity(
                 tokenPair.pool,
                 positionId,
                 percentage,
@@ -335,8 +330,9 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         (TokenPair memory tokenPair, , ) = _validateTokenPairAndPosition(
             positionId
         );
-        (uint256 amount0, uint256 amount1) = IUniswapV3LpManager(lpManager)
-            .collect(
+        (uint256 amount0, uint256 amount1) = IUniswapV3PositionManager(
+            lpManager
+        ).collect(
                 tokenPair.pool,
                 positionId,
                 address(this),
@@ -375,8 +371,15 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
         emit FeesCollected(positionId, amount0, amount1);
     }
 
-    function rebalance(
+    function balance1For0(
         RebalanceParams calldata params
+
+    ) external {
+
+    }
+
+    function rebalance(
+        
     )
         external
         onlyBalancer
@@ -404,7 +407,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
             uint128 liquidity,
             uint256 amount0Min,
             uint256 amount1Min
-        ) = IUniswapV3LpManager(lpManager).mint(
+        ) = IUniswapV3PositionManager(lpManager).mint(
                 tokenPair,
                 params.tickLower,
                 params.tickUpper,
@@ -414,7 +417,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
             );
 
         // update position
-        IUniswapV3LpManager(lpManager).updatePosition(
+        IUniswapV3PositionManager(lpManager).updatePosition(
             params.positionId,
             positionId
         );
@@ -439,7 +442,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
             positionId
         );
         // collect fee
-        IUniswapV3LpManager(lpManager).collect(
+        IUniswapV3PositionManager(lpManager).collect(
             tokenPair.pool,
             positionId,
             address(this),
@@ -447,7 +450,7 @@ contract UniswapV3LpHandlerV2 is UniswapV3SwapPool {
             type(uint128).max
         );
 
-        IUniswapV3LpManager(lpManager).decreaseLiquidity(
+        IUniswapV3PositionManager(lpManager).decreaseLiquidity(
             tokenPair.pool,
             positionId,
             percentage,
