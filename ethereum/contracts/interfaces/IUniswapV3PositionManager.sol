@@ -12,7 +12,7 @@ import {TokenPair} from "./IUniswapV3TokenPairs.sol";
 
 /// @title Uniswap V3 Position Manager
 /// @notice Manages Uniswap V3 liquidity positions
-interface IUniswapV3LpManager {
+interface IUniswapV3PositionManager {
     error InvalidPositionId(uint256 positionId);
     error InsufficientLiquidity(uint256 positionId);
     error InvalidCollectAmount();
@@ -77,7 +77,7 @@ interface IUniswapV3LpManager {
         external
         view
         returns (
-            PoolAddress.PoolKey memory poolKey,
+            TokenPair memory tokenPair,
             uint256 amount0,
             uint256 amount1
         );
