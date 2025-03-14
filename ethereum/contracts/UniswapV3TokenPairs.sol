@@ -22,7 +22,6 @@ contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
         address pool,
         uint24 poolFee
     );
-    event PoolFeeUpdated(uint8 indexed pairId, uint24 oldFee, uint24 newFee);
 
     function addTokenPair(
         address pool,
@@ -46,17 +45,6 @@ contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
         emit TokenPairAdded(pairId, token0, token1, pool, poolFee);
 
         return pairId;
-    }
-
-    function updatePoolFee(uint8 pairId, uint24 newPoolFee) external onlyOwner {
-        if (pairId == 0 || pairId >= _nextPairId) {
-            revert InvalidPairId();
-        }
-
-        TokenPair storage pair = _tokenPairs[pairId];
-        uint24 oldFee = pair.poolFee;
-        pair.poolFee = newPoolFee;
-        emit PoolFeeUpdated(pairId, oldFee, newPoolFee);
     }
 
     function getTokenPair(
