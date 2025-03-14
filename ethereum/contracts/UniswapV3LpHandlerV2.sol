@@ -13,9 +13,8 @@ import {LiquiditySwapV3} from "./UniswapV3LiquiditySwap.sol";
 import {IUniswapV3TokenPairs, TokenPair, LibTokenId} from "./interfaces/IUniswapV3TokenPairs.sol";
 import {LibPercentageMath} from "./RateMath.sol";
 import {UniswapV3PositionLib, Position} from "./libraries/UniswapV3PositionLib.sol";
-import {ILiquiditySwapV3, SearchRange} from "./interfaces/ILiquiditySwap.sol";
-
 import "./interfaces/IUniswapV3PositionManager.sol";
+import {ILiquiditySwapV3, SearchRange} from "./interfaces/ILiquiditySwap.sol";
 
 struct RebalanceParams {
     uint256 positionId;
