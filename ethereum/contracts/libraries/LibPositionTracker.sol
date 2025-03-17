@@ -95,6 +95,17 @@ library LibPositionTracker {
         );
     }
 
+    function getPositionInfo(
+        PositionTracker storage self,
+        bytes32 _positionKey
+    ) internal view returns (uint8, int24, int24) {
+        return (
+            self.positions[_positionKey].tokenPairId,
+            self.positions[_positionKey].tickLower,
+            self.positions[_positionKey].tickUpper
+        );
+    }
+
     function _derivePositionKey(
         uint8 _tokenPairId,
         int24 _tickLower,

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./interfaces/IUniswapV3TokenPairs.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import {IUniswapV3TokenPairs, TokenPair} from "./interfaces/IUniswapV3TokenPairs.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
     mapping(uint256 => TokenPair) private _tokenPairs;

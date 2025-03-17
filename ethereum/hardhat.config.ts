@@ -14,28 +14,45 @@ const { PRIVATE_KEY } = process.env;
 // You need to export an object to set up your config
 // Go to https://hardhat.org/config/ to learn more
 
-/**
- * @type import('hardhat/config').HardhatUserConfig
- */
-module.exports = {
+let config = {
   solidity: {
-    version: "0.8.15",
-    settings: {
-      viaIR: true,
-      optimizer: {
-        enabled: true,
-        runs: 200,
-        details: {
-          yulDetails: {
-            optimizerSteps: "u",
+    compilers: [
+      {
+        version: "0.8.12",
+        settings: {
+          viaIR: false,
+          optimizer: {
+            enabled: true,
+            runs: 200,
+            details: {
+              yulDetails: {
+                optimizerSteps: "u",
+              },
+            },
           },
         },
       },
-    },
+      // {
+      //   version: "0.8.15",
+      //   settings: {
+      //     viaIR: true,
+      //     optimizer: {
+      //       enabled: true,
+      //       runs: 200,
+      //       details: {
+      //         yulDetails: {
+      //           optimizerSteps: "u",
+      //         },
+      //       },
+      //     },
+      //   },
+      // },
+    ],
   },
   networks: {
     hardhat: {
       chainId: 31337,
+      allowUnlimitedContractSize: true
     },
     ethereum: {
       chainId: 1,
@@ -49,5 +66,8 @@ module.exports = {
     disambiguatePaths: true,
     runOnCompile: true,
     strict: true,
-  },
+    except: ["contracts/TestUtil", "contracts/mocks", "@uniswap/*", "@openzeppelin/*"],
+  }
 };
+
+module.exports = config;
