@@ -82,7 +82,7 @@ async function setupTest(): Promise<TestSetup> {
     supportedTokenPairs,
     balancer,
     liquidityOwner,
-    user
+    user,
   };
 }
 
@@ -142,7 +142,11 @@ describe("UniswapV3LpManager - Init", () => {
   it("initial liquidity add ok", async () => {
     const { lpManager, uniswap, liquidityOwner } = testSetup;
 
-    const initialPosition = await setupInitialPosition(lpManager, uniswap, liquidityOwner);
+    const initialPosition = await setupInitialPosition(
+      lpManager,
+      uniswap,
+      liquidityOwner
+    );
     expect(initialPosition.fee0).to.eq(0);
     expect(initialPosition.fee1).to.eq(0);
     // TODO: the should be equal, but might be differ by 1 wei due to precision issues
@@ -159,8 +163,12 @@ describe("UniswapV3LpManager - After Init", () => {
   beforeEach(async () => {
     testSetup = await setupTest();
     const { lpManager, uniswap, liquidityOwner } = testSetup;
-    
-    initialPosition = await setupInitialPosition(lpManager, uniswap, liquidityOwner);
+
+    initialPosition = await setupInitialPosition(
+      lpManager,
+      uniswap,
+      liquidityOwner
+    );
   });
 
   function withinPercentageDiff(a: BigInt, b: BigInt, tolerance: number) {
@@ -190,7 +198,9 @@ describe("UniswapV3LpManager - After Init", () => {
 
     expect(positionChange.change).to.eq(PositionChange.Increase);
 
-    const newPosition = await lpManager.getPosition(initialPosition.positionKey);
+    const newPosition = await lpManager.getPosition(
+      initialPosition.positionKey
+    );
     expect(newPosition.liquidity).to.be.gt(initialPosition.liquidity);
   });
 
@@ -222,7 +232,9 @@ describe("UniswapV3LpManager - After Init", () => {
 
     expect(positionChange.change).to.eq(PositionChange.Descrese);
 
-    const newPosition = await lpManager.getPosition(initialPosition.positionKey);
+    const newPosition = await lpManager.getPosition(
+      initialPosition.positionKey
+    );
     expect(newPosition.liquidity).to.be.lt(initialPosition.liquidity);
 
     const token0AfterBalance = await token0.balanceOf(
@@ -491,7 +503,11 @@ describe("UniswapV3LpManager - More Cases", () => {
   it("should revert when trying to decrease liquidity below minimum", async () => {
     const { lpManager, uniswap, liquidityOwner } = testSetup;
 
-    const result = await setupInitialPosition(lpManager, uniswap, liquidityOwner);
+    const result = await setupInitialPosition(
+      lpManager,
+      uniswap,
+      liquidityOwner
+    );
 
     // Try to decrease liquidity to 0
     const decreaseParams = {
@@ -512,8 +528,12 @@ describe("UniswapV3LpManager - More Cases", () => {
     const { lpManager, uniswap, liquidityOwner } = testSetup;
 
     const tokenPairId = 1;
-  
-    const result = await setupInitialPosition(lpManager, uniswap, liquidityOwner);
+
+    const result = await setupInitialPosition(
+      lpManager,
+      uniswap,
+      liquidityOwner
+    );
     expect(result.tokenPair).to.eq(tokenPairId);
     expect(result.change).to.eq(PositionChange.Create);
   });
@@ -526,7 +546,11 @@ describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
   beforeEach(async () => {
     testSetup = await setupTest();
     const { lpManager, uniswap, liquidityOwner } = testSetup;
-    initialPosition = await setupInitialPosition(lpManager, uniswap, liquidityOwner);
+    initialPosition = await setupInitialPosition(
+      lpManager,
+      uniswap,
+      liquidityOwner
+    );
   });
 
   it("should revert rebalance with invalid search range", async () => {
@@ -567,10 +591,7 @@ describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
       amount1Min: BigInt(0),
       compoundFee: false,
     };
-    await lpManager.rebalanceClosePosition(
-      initialPosition.positionKey,
-      params
-    );
+    await lpManager.rebalanceClosePosition(initialPosition.positionKey, params);
 
     const token0AfterBalance = await token0.balanceOf(liquidityOwnerAddress);
     const token1AfterBalance = await token1.balanceOf(liquidityOwnerAddress);
@@ -598,19 +619,22 @@ describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
   it("should batch collect fees successfully for a valid position", async () => {
     const { lpManager, uniswap, liquidityOwner } = testSetup;
     lpManager.useCaller(liquidityOwner);
-    
+
     const token0 = await loadContract("IERC20", uniswap.token0, liquidityOwner);
     const token1 = await loadContract("IERC20", uniswap.token1, liquidityOwner);
     const liquidityOwnerAddress = await liquidityOwner.getAddress();
-    
+
     // Record initial balances
     const token0InitialBalance = await token0.balanceOf(liquidityOwnerAddress);
     const token1InitialBalance = await token1.balanceOf(liquidityOwnerAddress);
-    
+
     // Batch Collect fees
-    expect(await lpManager.innerContract.batchCollectFees([initialPosition.positionKey]))
-      .to.emit(lpManager.innerContract, "FeesCollected")
-    
+    expect(
+      await lpManager.innerContract.batchCollectFees([
+        initialPosition.positionKey,
+      ])
+    ).to.emit(lpManager.innerContract, "FeesCollected");
+
     // Verify balances after fee collection
     const token0AfterBalance = await token0.balanceOf(liquidityOwnerAddress);
     const token1AfterBalance = await token1.balanceOf(liquidityOwnerAddress);
@@ -620,50 +644,59 @@ describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
 
   it("should handle invalid position keys in batch collection", async () => {
     const { lpManager, liquidityOwner } = testSetup;
-    const invalidPositionKey = ethers.keccak256(ethers.toUtf8Bytes("invalid_position"));
-    
+    const invalidPositionKey = ethers.keccak256(
+      ethers.toUtf8Bytes("invalid_position")
+    );
+
     lpManager.useCaller(liquidityOwner);
-    
+
     await expect(
       lpManager.innerContract.batchCollectFees([invalidPositionKey])
-    ).to.be.revertedWithCustomError(lpManager.innerContract, "InvalidPositionKey");
+    ).to.be.revertedWithCustomError(
+      lpManager.innerContract,
+      "InvalidPositionKey"
+    );
   });
 
   it("should handle empty position keys array", async () => {
     const { lpManager, liquidityOwner } = testSetup;
     lpManager.useCaller(liquidityOwner);
-    
-    await expect(
-      lpManager.innerContract.batchCollectFees([])
-    ).to.not.be.reverted;
+
+    await expect(lpManager.innerContract.batchCollectFees([])).to.not.be
+      .reverted;
   });
 
   it("should revert when non-liquidity owner calls batchCollectFees", async () => {
     const { lpManager, user } = testSetup;
     lpManager.useCaller(user);
-    
+
     await expect(
       lpManager.innerContract.batchCollectFees([initialPosition.positionKey])
-    ).to.be.revertedWithCustomError(lpManager.innerContract, "NotLiquidityOwner");
+    ).to.be.revertedWithCustomError(
+      lpManager.innerContract,
+      "NotLiquidityOwner"
+    );
   });
 
   it("should collect fees successfully for a valid position", async () => {
     const { lpManager, uniswap, liquidityOwner } = testSetup;
     lpManager.useCaller(liquidityOwner);
-    
+
     const token0 = await loadContract("IERC20", uniswap.token0, liquidityOwner);
     const token1 = await loadContract("IERC20", uniswap.token1, liquidityOwner);
     const liquidityOwnerAddress = await liquidityOwner.getAddress();
-    
+
     // Record initial balances
     const token0InitialBalance = await token0.balanceOf(liquidityOwnerAddress);
     const token1InitialBalance = await token1.balanceOf(liquidityOwnerAddress);
-    
+
     // Collect fees
-    await expect(lpManager.innerContract.collectAllFees(initialPosition.positionKey))
+    await expect(
+      lpManager.innerContract.collectAllFees(initialPosition.positionKey)
+    )
       .to.emit(lpManager.innerContract, "FeesCollected")
       .withArgs(initialPosition.positionKey, 0, 0);
-    
+
     // Verify balances after fee collection
     const token0AfterBalance = await token0.balanceOf(liquidityOwnerAddress);
     const token1AfterBalance = await token1.balanceOf(liquidityOwnerAddress);
@@ -674,21 +707,29 @@ describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
   it("should revert when non-liquidity owner calls collectAllFees", async () => {
     const { lpManager, user } = testSetup;
     lpManager.useCaller(user);
-    
+
     await expect(
       lpManager.innerContract.collectAllFees(initialPosition.positionKey)
-    ).to.be.revertedWithCustomError(lpManager.innerContract, "NotLiquidityOwner");
+    ).to.be.revertedWithCustomError(
+      lpManager.innerContract,
+      "NotLiquidityOwner"
+    );
   });
 
   it("should revert with invalid position key", async () => {
     const { lpManager, liquidityOwner } = testSetup;
-    const invalidPositionKey = ethers.keccak256(ethers.toUtf8Bytes("invalid_position"));
-    
+    const invalidPositionKey = ethers.keccak256(
+      ethers.toUtf8Bytes("invalid_position")
+    );
+
     lpManager.useCaller(liquidityOwner);
-    
+
     await expect(
       lpManager.innerContract.collectAllFees(invalidPositionKey)
-    ).to.be.revertedWithCustomError(lpManager.innerContract, "InvalidPositionKey");
+    ).to.be.revertedWithCustomError(
+      lpManager.innerContract,
+      "InvalidPositionKey"
+    );
   });
 });
 
@@ -699,24 +740,28 @@ describe("UniswapV3LpManager - Position Operations", () => {
   beforeEach(async () => {
     testSetup = await setupTest();
     const { lpManager, uniswap, liquidityOwner } = testSetup;
-    initialPosition = await setupInitialPosition(lpManager, uniswap, liquidityOwner);
+    initialPosition = await setupInitialPosition(
+      lpManager,
+      uniswap,
+      liquidityOwner
+    );
   });
 
   it("should close position successfully", async () => {
     const { lpManager, uniswap, liquidityOwner } = testSetup;
     lpManager.useCaller(liquidityOwner);
-    
+
     const token0 = await loadContract("IERC20", uniswap.token0, liquidityOwner);
     const token1 = await loadContract("IERC20", uniswap.token1, liquidityOwner);
     const liquidityOwnerAddress = await liquidityOwner.getAddress();
-    
+
     // Record initial balances
     const token0InitialBalance = await token0.balanceOf(liquidityOwnerAddress);
     const token1InitialBalance = await token1.balanceOf(liquidityOwnerAddress);
-    
+
     // Close position
     const result = await lpManager.closePosition(initialPosition.positionKey);
-    
+
     expect(result.change).to.eq(PositionChange.Closed);
     expect(result.amount0).to.be.gt(0);
     expect(result.amount1).to.be.gt(0);
@@ -724,8 +769,11 @@ describe("UniswapV3LpManager - Position Operations", () => {
     // Verify position is closed
     await expect(
       lpManager.getPosition(initialPosition.positionKey)
-    ).to.be.revertedWithCustomError(lpManager.innerContract, "InvalidPositionKey");
-    
+    ).to.be.revertedWithCustomError(
+      lpManager.innerContract,
+      "InvalidPositionKey"
+    );
+
     // Verify tokens are returned
     const token0AfterBalance = await token0.balanceOf(liquidityOwnerAddress);
     const token1AfterBalance = await token1.balanceOf(liquidityOwnerAddress);
@@ -736,25 +784,25 @@ describe("UniswapV3LpManager - Position Operations", () => {
   it("should close position successfully with minimum amounts", async () => {
     const { lpManager, uniswap, liquidityOwner } = testSetup;
     lpManager.useCaller(liquidityOwner);
-    
+
     const token0 = await loadContract("IERC20", uniswap.token0, liquidityOwner);
     const token1 = await loadContract("IERC20", uniswap.token1, liquidityOwner);
     const liquidityOwnerAddress = await liquidityOwner.getAddress();
-    
+
     // Record initial balances
     const token0InitialBalance = await token0.balanceOf(liquidityOwnerAddress);
     const token1InitialBalance = await token1.balanceOf(liquidityOwnerAddress);
-    
+
     const amount0Min = ethers.parseEther("0.1");
     const amount1Min = ethers.parseEther("0.001");
-    
+
     // Close position with minimum amounts
     const result = await lpManager.closePosition(
       initialPosition.positionKey,
       amount0Min,
       amount1Min
     );
-    
+
     expect(result.change).to.eq(PositionChange.Closed);
     expect(result.amount0).to.be.gte(amount0Min);
     expect(result.amount1).to.be.gte(amount1Min);
@@ -762,8 +810,11 @@ describe("UniswapV3LpManager - Position Operations", () => {
     // Verify position is closed
     await expect(
       lpManager.getPosition(initialPosition.positionKey)
-    ).to.be.revertedWithCustomError(lpManager.innerContract, "InvalidPositionKey");
-    
+    ).to.be.revertedWithCustomError(
+      lpManager.innerContract,
+      "InvalidPositionKey"
+    );
+
     // Verify tokens are returned
     const token0AfterBalance = await token0.balanceOf(liquidityOwnerAddress);
     const token1AfterBalance = await token1.balanceOf(liquidityOwnerAddress);
@@ -774,49 +825,128 @@ describe("UniswapV3LpManager - Position Operations", () => {
   it("should revert when closing position with too high minimum amounts", async () => {
     const { lpManager, liquidityOwner } = testSetup;
     lpManager.useCaller(liquidityOwner);
-    
+
     const amount0Min = ethers.parseEther("1000000"); // unreasonably high
     const amount1Min = ethers.parseEther("1000000"); // unreasonably high
-    
+
     await expect(
-      lpManager.closePosition(initialPosition.positionKey, amount0Min, amount1Min)
-    ).to.be.revertedWithCustomError(lpManager.innerContract, "PriceSlippageCheck");
+      lpManager.closePosition(
+        initialPosition.positionKey,
+        amount0Min,
+        amount1Min
+      )
+    ).to.be.revertedWithCustomError(
+      lpManager.innerContract,
+      "PriceSlippageCheck"
+    );
   });
 
   it("should revert when non-owner tries to close position", async () => {
     const { lpManager, user } = testSetup;
     lpManager.useCaller(user);
-    
+
     await expect(
       lpManager.closePosition(initialPosition.positionKey)
-    ).to.be.revertedWithCustomError(lpManager.innerContract, "NotLiquidityOwner");
+    ).to.be.revertedWithCustomError(
+      lpManager.innerContract,
+      "NotLiquidityOwner"
+    );
   });
 
   it("should revert when closing invalid position", async () => {
     const { lpManager, liquidityOwner } = testSetup;
     lpManager.useCaller(liquidityOwner);
-    
-    const invalidPositionKey = ethers.keccak256(ethers.toUtf8Bytes("invalid_position"));
-    
+
+    const invalidPositionKey = ethers.keccak256(
+      ethers.toUtf8Bytes("invalid_position")
+    );
+
     await expect(
       lpManager.closePosition(invalidPositionKey)
-    ).to.be.revertedWithCustomError(lpManager.innerContract, "InvalidPositionKey");
+    ).to.be.revertedWithCustomError(
+      lpManager.innerContract,
+      "InvalidPositionKey"
+    );
   });
 
   it("should collect fees when closing position", async () => {
     const { lpManager, uniswap, liquidityOwner } = testSetup;
     lpManager.useCaller(liquidityOwner);
-    
+
     // Get initial collected fees
-    const initialFees = await lpManager.getPosition(initialPosition.positionKey);
+    const initialFees = await lpManager.getPosition(
+      initialPosition.positionKey
+    );
     const fee0Before = initialFees.fee0;
     const fee1Before = initialFees.fee1;
-    
+
     // Close position
     const result = await lpManager.closePosition(initialPosition.positionKey);
-    
+
     // Verify fees are included in returned amounts
     expect(result.amount0).to.be.gte(fee0Before);
     expect(result.amount1).to.be.gte(fee1Before);
+  });
+});
+
+describe("UniswapV3LpManager - Rebalance Operations", () => {
+  let testSetup: TestSetup;
+  let initialPosition: InitialPositionResult;
+
+  beforeEach(async () => {
+    testSetup = await setupTest();
+    const { lpManager, uniswap, liquidityOwner } = testSetup;
+    initialPosition = await setupInitialPosition(
+      lpManager,
+      uniswap,
+      liquidityOwner
+    );
+  });
+
+  it("rebalance1For0 should call _rebalanceIncreaseLiquidity when within tick range", async () => {
+    const { lpManager, uniswap, balancer, liquidityOwner } = testSetup;
+
+    // Get initial position
+    const position = await lpManager.getPosition(initialPosition.positionKey);
+    const initialLiquidity = position.liquidity;
+
+    // Use same amount and params from successful test case
+    const amount = ethers.parseEther("0.01");
+    const token1 = await loadContract("IERC20", uniswap.token1, liquidityOwner);
+
+    // Transfer tokens to contract
+    await token1.transfer(await lpManager.innerContract.getAddress(), amount);
+
+    // Use exact same parameters that worked in "rebalance 1 for 0 - new position created" test
+    const rebalanceParams = {
+      tokenPairId: position.tokenPairId,
+      sqrtPriceLimitX96: 4880412434988856429110099968n,
+      maxMintSlippageRate: lpManager.toOnChainRate(1),
+      tickLower: position.tickLower, // Only change: use existing position's ticks
+      tickUpper: position.tickUpper, // Only change: use existing position's ticks
+      R_Q96: 252704211256043437387939840n,
+      amount0: ethers.parseEther("0"),
+      amount1: amount,
+      searchRange: {
+        swapInLow: ethers.parseEther("0.004956984791606578"),
+        swapInHigh: ethers.parseEther("0.004971855745981397"),
+        searchLoopNum: 5,
+      },
+    };
+
+    // Execute rebalance
+    await lpManager.useCaller(balancer);
+    const result = await lpManager.rebalance1For0(rebalanceParams);
+
+    expect(result).to.emit(lpManager.innerContract, "PositionChanged");
+
+    // Verify results
+    expect(result.change).to.eq(PositionChange.Increase);
+    expect(result.positionKey).to.eq(initialPosition.positionKey);
+
+    const newPosition = await lpManager.getPosition(
+      initialPosition.positionKey
+    );
+    expect(newPosition.liquidity).to.be.gt(initialLiquidity);
   });
 });
