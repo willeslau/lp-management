@@ -2,6 +2,7 @@
 import "@nomicfoundation/hardhat-ethers";
 import "@nomicfoundation/hardhat-toolbox";
 import "hardhat-contract-sizer";
+import "solidity-coverage";
 
 // load .env config
 const dotenvConfig = require("dotenv").config;
@@ -23,12 +24,7 @@ let config = {
           viaIR: false,
           optimizer: {
             enabled: true,
-            runs: 200,
-            details: {
-              yulDetails: {
-                optimizerSteps: "u",
-              },
-            },
+            runs: 1000
           },
         },
       },
