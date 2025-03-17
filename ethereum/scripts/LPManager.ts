@@ -240,6 +240,25 @@ export class LPManager {
             positionKey
         }
     }
+
+    public async withdrawRemainingFunds(tokenPairId: number): Promise<void> {
+        const tx = await this.innerContract.withdraw(tokenPairId);
+        await tx.wait();
+    }
+
+    async closePosition(
+        positionKey: string, 
+        amount0Min: bigint = BigInt(0), 
+        amount1Min: bigint = BigInt(0)
+    ): Promise<{
+        amount0: bigint;
+        amount1: bigint;
+        change: PositionChange;
+    }> {
+        const tx = await this.innerContract.closePosition(positionKey, amount0Min, amount1Min);
+        const receipt = await tx.wait();
+        return this.parsePositionChangedLog(receipt.logs);
+    }
 }
 
 export enum PositionChange {
