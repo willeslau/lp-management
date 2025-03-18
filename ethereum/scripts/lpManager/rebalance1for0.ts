@@ -47,10 +47,14 @@ async function main() {
         searchRange,
     }
 
-    await lpManager.useCaller(deployer);
+    // await lpManager.useCaller(deployer);
 
-    const positionChange = await lpManager.rebalance1For0(rebalanceParams);
-    console.log(positionChange);
+    // const positionChange = await lpManager.rebalance1For0(rebalanceParams);
+
+    console.log(
+      lpManager.innerContract.interface.getError("19a2cf76")
+    );
+    // console.log(positionChange);
 
     process.exit(0);
   } catch (error) {
