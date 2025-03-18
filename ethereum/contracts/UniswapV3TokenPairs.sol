@@ -47,12 +47,6 @@ contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
         return pairId;
     }
 
-    function getTokenPair(
-        uint256 pairId
-    ) external view returns (TokenPair memory) {
-        return _tokenPairs[pairId];
-    }
-
     function getTokenPairId(
         address token0,
         address token1
@@ -107,20 +101,20 @@ contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
         address token0,
         address token1
     ) internal view {
-        if (token0 >= token1) {
-            revert TokenAddressesNotSorted();
-        }
-
-        if (_pairIds[token0][token1] != 0) {
-            revert PairAlreadyExists();
-        }
-
         if (pool == address(0)) {
             revert InvalidPoolAddress();
         }
 
         if (token0 == address(0) || token1 == address(0)) {
             revert InvalidTokenAddress();
+        }
+
+        if (token0 >= token1) {
+            revert TokenAddressesNotSorted();
+        }
+
+        if (_pairIds[token0][token1] != 0) {
+            revert PairAlreadyExists();
         }
     }
 
