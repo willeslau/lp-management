@@ -68,3 +68,9 @@ export const getTimestampFromDate = (date?: Date): number => {
   }
   return Math.floor(date.getTime() / 1000);
 }
+
+export function sortTokenAddresses(token0Address: string, token1Address: string): [string, string] {
+  return token0Address.toLowerCase() < token1Address.toLowerCase()
+    ? [token0Address, token1Address]
+    : [token1Address, token0Address];
+}

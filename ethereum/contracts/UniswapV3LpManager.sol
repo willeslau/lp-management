@@ -72,7 +72,7 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         address operator
     );
     event FeesCollected(bytes32 positionKey, uint256 fee0, uint256 fee1);
-    event RemainingFundsWithdraw(uint256 amount0, uint256 amount1);
+    event RemainingFundsWithdrawn(address user, uint256 amount0, uint256 amount1);
 
     /// @dev A util contract that checks the list of supported uniswap v3 token pairs
     IUniswapV3TokenPairs public immutable supportedTokenPairs;
@@ -413,13 +413,13 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
     function withdraw(uint8 _tokenPairId) external onlyLiquidityOwner {
         TokenPair memory tokenPair = _ensureValidTokenPair(_tokenPairId);
 
-        uint256 amount0 = IERC20(tokenPair.token0).balanceOf(msg.sender);
+        uint256 amount0 = IERC20(tokenPair.token0).balanceOf(address(this));
         IERC20(tokenPair.token0).safeTransfer(liquidityOwner, amount0);
 
-        uint256 amount1 = IERC20(tokenPair.token1).balanceOf(msg.sender);
+        uint256 amount1 = IERC20(tokenPair.token1).balanceOf(address(this));
         IERC20(tokenPair.token1).safeTransfer(liquidityOwner, amount1);
 
-        emit RemainingFundsWithdraw(amount0, amount1);
+        emit RemainingFundsWithdrawn(liquidityOwner, amount0, amount1);
     }
 
     function position(
