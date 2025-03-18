@@ -106,7 +106,10 @@ contract UniswapV3PoolsProxy is CallbackUtil, IUniswapV3MintCallback {
             uint128(amount1)
         );
 
-        if (uint128(amount0Collected) < _amount0Min || uint256(amount1Collected) < _amount1Min) {
+        if (
+            uint128(amount0Collected) < _amount0Min ||
+            uint256(amount1Collected) < _amount1Min
+        ) {
             revert PriceSlippageCheck();
         }
 
@@ -186,7 +189,13 @@ contract UniswapV3PoolsProxy is CallbackUtil, IUniswapV3MintCallback {
     )
         public
         view
-        returns (uint128 liquidity, uint256 amount0, uint256 amount1, uint128 tokensOwed0, uint128 tokensOwed1)
+        returns (
+            uint128 liquidity,
+            uint256 amount0,
+            uint256 amount1,
+            uint128 tokensOwed0,
+            uint128 tokensOwed1
+        )
     {
         bytes32 uniswapPositionKey = PositionKey.compute(
             address(this),
@@ -203,18 +212,19 @@ contract UniswapV3PoolsProxy is CallbackUtil, IUniswapV3MintCallback {
         uint160 sqrtRatioAX96 = TickMath.getSqrtRatioAtTick(_tickLower);
         uint160 sqrtRatioBX96 = TickMath.getSqrtRatioAtTick(_tickUpper);
 
-        (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(sqrtPriceX96, sqrtRatioAX96, sqrtRatioBX96, liquidity);
+        (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
+            sqrtPriceX96,
+            sqrtRatioAX96,
+            sqrtRatioBX96,
+            liquidity
+        );
     }
 
     function _positionLiquidity(
         IUniswapV3Pool _pool,
         int24 _tickLower,
         int24 _tickUpper
-    )
-        public
-        view
-        returns (uint128 liquidity)
-    {
+    ) public view returns (uint128 liquidity) {
         bytes32 uniswapPositionKey = PositionKey.compute(
             address(this),
             _tickLower,

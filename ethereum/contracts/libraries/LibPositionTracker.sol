@@ -24,11 +24,17 @@ library LibPositionTracker {
     error InvalidPositionKey(bytes32 key);
     error PositionNotCleared();
 
-    function length(PositionTracker storage self) internal view returns (uint256) {
+    function length(
+        PositionTracker storage self
+    ) internal view returns (uint256) {
         return self.positionKeys.length();
     }
 
-    function list(PositionTracker storage self, uint256 _start, uint256 _end) internal view returns (bytes32[] memory data) {
+    function list(
+        PositionTracker storage self,
+        uint256 _start,
+        uint256 _end
+    ) internal view returns (bytes32[] memory data) {
         uint256 l = length(self);
         _end = _end >= l ? l - 1 : _end;
 

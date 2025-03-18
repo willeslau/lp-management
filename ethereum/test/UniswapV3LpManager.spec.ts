@@ -176,6 +176,15 @@ describe("UniswapV3LpManager - After Init", () => {
     expect(diff).to.be.lt(tolerance);
   }
 
+  it("list positions - works", async () => {
+    const { lpManager, uniswap, liquidityOwner } = testSetup;
+
+    await lpManager.useCaller(liquidityOwner);
+
+    const r = await lpManager.listPositionKeys(0, 0);
+    expect(r.totalPositions).to.eq(1);
+  });
+
   it("increase liquidity - works", async () => {
     const { lpManager, uniswap, liquidityOwner } = testSetup;
     const amount0 = ethers.parseEther("33");

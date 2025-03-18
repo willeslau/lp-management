@@ -72,7 +72,11 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         address operator
     );
     event FeesCollected(bytes32 positionKey, uint256 fee0, uint256 fee1);
-    event RemainingFundsWithdrawn(address user, uint256 amount0, uint256 amount1);
+    event RemainingFundsWithdrawn(
+        address user,
+        uint256 amount0,
+        uint256 amount1
+    );
 
     /// @dev A util contract that checks the list of supported uniswap v3 token pairs
     IUniswapV3TokenPairs public immutable supportedTokenPairs;
@@ -132,7 +136,10 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         operationalParams.protocolFeeRate = _newRate;
     }
 
-    function listPositionKeys(uint256 _start, uint256 _end) external view returns (uint256 total, bytes32[] memory keys) {
+    function listPositionKeys(
+        uint256 _start,
+        uint256 _end
+    ) external view returns (uint256 total, bytes32[] memory keys) {
         total = positionTracker.length();
         keys = positionTracker.list(_start, _end);
     }
@@ -181,9 +188,7 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         uint256 _amount0Min,
         uint256 _amount1Min
     ) external onlyLiquidityOwner {
-        TokenPair memory tokenPair = _ensureValidPosition(
-            _positionKey
-        );
+        TokenPair memory tokenPair = _ensureValidPosition(_positionKey);
 
         _transferFundsAndApprove(tokenPair.token0, _amount0Desired);
         _transferFundsAndApprove(tokenPair.token1, _amount1Desired);
@@ -221,9 +226,7 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         uint256 _amount0Min,
         uint256 _amount1Min
     ) external onlyLiquidityOwner {
-        TokenPair memory tokenPair = _ensureValidPosition(
-            _positionKey
-        );
+        TokenPair memory tokenPair = _ensureValidPosition(_positionKey);
         LiquidityChangeOutput memory output = _decreaseLiquidity(
             tokenPair,
             _positionKey,
@@ -234,7 +237,14 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         IERC20(tokenPair.token0).safeTransfer(msg.sender, output.amount0);
         IERC20(tokenPair.token1).safeTransfer(msg.sender, output.amount1);
 
-        emit PositionChanged(tokenPair.id, _positionKey, PositionChange.Descrese, output.amount0, output.amount1, msg.sender);
+        emit PositionChanged(
+            tokenPair.id,
+            _positionKey,
+            PositionChange.Descrese,
+            output.amount0,
+            output.amount1,
+            msg.sender
+        );
     }
 
     /// @notice Collects all the fees associated with provided liquidity
@@ -243,9 +253,7 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
     ) external onlyLiquidityOwner {
         uint256 length = _positionKeys.length;
         for (uint256 i = 0; i < length; ) {
-            TokenPair memory tokenPair = _ensureValidPosition(
-                _positionKeys[i]
-            );
+            TokenPair memory tokenPair = _ensureValidPosition(_positionKeys[i]);
             _collectAllFees(tokenPair, _positionKeys[i]);
             unchecked {
                 ++i;
@@ -255,9 +263,7 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
 
     /// @notice Collects the fees associated with provided liquidity
     function collectAllFees(bytes32 _positionKey) public onlyLiquidityOwner {
-        TokenPair memory tokenPair = _ensureValidPosition(
-            _positionKey
-        );
+        TokenPair memory tokenPair = _ensureValidPosition(_positionKey);
         (uint256 fee0, uint256 fee1) = _collectAllFees(tokenPair, _positionKey);
         IERC20(tokenPair.token0).safeTransfer(msg.sender, fee0);
         IERC20(tokenPair.token1).safeTransfer(msg.sender, fee1);
@@ -270,7 +276,10 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
 
         bytes memory preSwapBytes = _preSwapBytes(_params, tokenPair, false);
 
-        IERC20(tokenPair.token1).approve(address(liquiditySwap), _params.amount1);
+        IERC20(tokenPair.token1).approve(
+            address(liquiditySwap),
+            _params.amount1
+        );
 
         (int256 amount0Delta, int256 amount1Delta) = liquiditySwap
             .swapWithSearch1For0(
@@ -296,7 +305,14 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
                 _params.amount0 + uint256(amount0Delta),
                 _params.amount1 - uint256(-amount1Delta)
             );
-            emit PositionChanged(tokenPair.id, positionKey, PositionChange.Increase, output.amount0, output.amount1, msg.sender);
+            emit PositionChanged(
+                tokenPair.id,
+                positionKey,
+                PositionChange.Increase,
+                output.amount0,
+                output.amount1,
+                msg.sender
+            );
         } else {
             MintParams memory params = MintParams({
                 tickLower: _params.tickLower,
@@ -320,7 +336,14 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
                 _params.tickUpper
             );
 
-            emit PositionChanged(tokenPair.id, positionKey, PositionChange.Create, output.amount0, output.amount1, msg.sender);
+            emit PositionChanged(
+                tokenPair.id,
+                positionKey,
+                PositionChange.Create,
+                output.amount0,
+                output.amount1,
+                msg.sender
+            );
         }
     }
 
@@ -331,7 +354,10 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
 
         bytes memory preSwapBytes = _preSwapBytes(_params, tokenPair, true);
 
-        IERC20(tokenPair.token0).approve(address(liquiditySwap), _params.amount0);
+        IERC20(tokenPair.token0).approve(
+            address(liquiditySwap),
+            _params.amount0
+        );
 
         (int256 amount0Delta, int256 amount1Delta) = liquiditySwap
             .swapWithSearch0For1(
@@ -357,7 +383,14 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
                 _params.amount0 - uint256(-amount0Delta),
                 _params.amount1 + uint256(amount1Delta)
             );
-            emit PositionChanged(tokenPair.id, positionKey, PositionChange.Increase, output.amount0, output.amount1, msg.sender);
+            emit PositionChanged(
+                tokenPair.id,
+                positionKey,
+                PositionChange.Increase,
+                output.amount0,
+                output.amount1,
+                msg.sender
+            );
         } else {
             MintParams memory params = MintParams({
                 tickLower: _params.tickLower,
@@ -381,7 +414,14 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
                 _params.tickUpper
             );
 
-            emit PositionChanged(tokenPair.id, positionKey, PositionChange.Create, output.amount0, output.amount1, msg.sender);
+            emit PositionChanged(
+                tokenPair.id,
+                positionKey,
+                PositionChange.Create,
+                output.amount0,
+                output.amount1,
+                msg.sender
+            );
         }
     }
 
@@ -392,7 +432,12 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         bool _compoundFee
     ) external onlyBalancer {
         TokenPair memory tokenPair = _ensureValidPosition(_positionKey);
-        (uint256 fee0, uint256 fee1, ) = _closePosition(tokenPair, _positionKey, _amount0Min, _amount1Min);
+        (uint256 fee0, uint256 fee1, ) = _closePosition(
+            tokenPair,
+            _positionKey,
+            _amount0Min,
+            _amount1Min
+        );
 
         if (!_compoundFee) {
             IERC20(tokenPair.token0).safeTransfer(liquidityOwner, fee0);
@@ -409,10 +454,20 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
     ) external onlyLiquidityOwner {
         TokenPair memory tokenPair = _ensureValidPosition(_positionKey);
 
-        (uint256 fee0, uint256 fee1, LiquidityChangeOutput memory change) = _closePosition(tokenPair, _positionKey, _amount0Min, _amount1Min);
+        (
+            uint256 fee0,
+            uint256 fee1,
+            LiquidityChangeOutput memory change
+        ) = _closePosition(tokenPair, _positionKey, _amount0Min, _amount1Min);
 
-        IERC20(tokenPair.token0).safeTransfer(msg.sender, fee0 + change.amount0);
-        IERC20(tokenPair.token1).safeTransfer(msg.sender, fee1 + change.amount1);
+        IERC20(tokenPair.token0).safeTransfer(
+            msg.sender,
+            fee0 + change.amount0
+        );
+        IERC20(tokenPair.token1).safeTransfer(
+            msg.sender,
+            fee1 + change.amount1
+        );
     }
 
     function withdraw(uint8 _tokenPairId) external onlyLiquidityOwner {
@@ -424,21 +479,28 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         uint256 amount1 = IERC20(tokenPair.token1).balanceOf(address(this));
         IERC20(tokenPair.token1).safeTransfer(liquidityOwner, amount1);
 
-        emit RemainingFundsWithdrawn(liquidityOwner, amount0, amount1);
+        emit RemainingFundsWithdrawn(msg.sender, amount0, amount1);
     }
 
     function position(
         bytes32 _positionKey
     ) public view returns (LpPosition memory pos) {
-        TokenPair memory tokenPair = _ensureValidPosition(
-            _positionKey
-        );
+        TokenPair memory tokenPair = _ensureValidPosition(_positionKey);
 
-        (pos.tokenPairId, pos.tickLower, pos.tickUpper) = positionTracker.getPositionInfo(
-            _positionKey
-        );
+        (pos.tokenPairId, pos.tickLower, pos.tickUpper) = positionTracker
+            .getPositionInfo(_positionKey);
 
-        (pos.liquidity, pos.amount0, pos.amount1, pos.fee0, pos.fee1) = _position(IUniswapV3Pool(tokenPair.pool), pos.tickLower, pos.tickUpper);
+        (
+            pos.liquidity,
+            pos.amount0,
+            pos.amount1,
+            pos.fee0,
+            pos.fee1
+        ) = _position(
+            IUniswapV3Pool(tokenPair.pool),
+            pos.tickLower,
+            pos.tickUpper
+        );
     }
 
     function _closePosition(
@@ -446,12 +508,25 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         bytes32 _positionKey,
         uint256 _amount0Min,
         uint256 _amount1Min
-    ) internal returns(uint256 fee0, uint256 fee1, LiquidityChangeOutput memory output) {
+    )
+        internal
+        returns (
+            uint256 fee0,
+            uint256 fee1,
+            LiquidityChangeOutput memory output
+        )
+    {
         (fee0, fee1) = _collectAllFees(tokenPair, _positionKey);
 
-        (, int24 tickLower, int24 tickUpper) = positionTracker.getPositionInfo(_positionKey);
+        (, int24 tickLower, int24 tickUpper) = positionTracker.getPositionInfo(
+            _positionKey
+        );
 
-        uint128 liquidity= _positionLiquidity(IUniswapV3Pool(tokenPair.pool), tickLower, tickUpper);
+        uint128 liquidity = _positionLiquidity(
+            IUniswapV3Pool(tokenPair.pool),
+            tickLower,
+            tickUpper
+        );
 
         // liquidity is now in the contract
         output = _decreaseLiquidity(
@@ -464,7 +539,14 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
 
         positionTracker.remove(_positionKey);
 
-        emit PositionChanged(tokenPair.id, _positionKey, PositionChange.Closed, output.amount0, output.amount1, msg.sender);
+        emit PositionChanged(
+            tokenPair.id,
+            _positionKey,
+            PositionChange.Closed,
+            output.amount0,
+            output.amount1,
+            msg.sender
+        );
     }
 
     function _decreaseLiquidity(
@@ -568,7 +650,7 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         uint8 tokenPairId = positionTracker.getPositionTokenPair(_positionKey);
         tokenPair = _ensureValidTokenPair(tokenPairId);
     }
-    
+
     function _preSwapBytes(
         RebalanceParams calldata _params,
         TokenPair memory _tokenPair,
@@ -579,9 +661,8 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
             (, tickCur, , , , , ) = IUniswapV3Pool(_tokenPair.pool).slot0();
         }
 
-
         PreSwapParam memory swapData;
-        
+
         if (zeroForOne) {
             swapData = PreSwapParam({
                 amount0: _params.amount0,

@@ -62,6 +62,11 @@ export interface MintPosition {
     amount1: bigint,
 }
 
+export interface ListPositionKeys {
+    totalPositions: number,
+    positionKeys: string[],
+}
+
 export class LPManager {
     innerContract: Contract;
 
@@ -115,6 +120,14 @@ export class LPManager {
 
     public toOnChainRate(num: number): number {
         return num * 1000;
+    }
+
+    public async listPositionKeys(startIndex: number, endIndex: number): Promise<ListPositionKeys> {
+        const [total, pos] = await this.innerContract.listPositionKeys(startIndex, endIndex);
+        return {
+            totalPositions: total,
+            positionKeys: pos
+        };
     }
 
     public async increaseLiquidity(positionKey: string, params: IncreasLiquidityParams): Promise<PositionChanged> {
