@@ -338,6 +338,82 @@ describe("UniswapV3LpManager - After Init", () => {
     expect(positionChange.change).to.eq(PositionChange.Create);
     withinPercentageDiff(positionChange.amount0, expectedPosition0, 0.012);
     withinPercentageDiff(positionChange.amount1, expectedPosition1, 0.01);
+
+    const position = await lpManager.getPosition(positionChange.positionKey);
+    expect(position.tokenPairId).to.be.eq(tokenPairId);
+  });
+
+  it("rebalance 1 for 0 - follow up operations ok", async () => {
+    const { lpManager, uniswap, balancer, liquidityOwner } = testSetup;
+    // sending 0.01 token1 to the contract to simulate rebalance close is already called
+    const amount = ethers.parseEther("0.01"); // Increased test amount
+    const token1 = await loadContract("IERC20", uniswap.token1, liquidityOwner);
+
+    await token1.transfer(await lpManager.innerContract.getAddress(), amount);
+
+    // now, off chain calculation based on current liquidity and price sqrt
+    const rebalanceParams = {
+      tokenPairId,
+      // local testing, no need slippage protection
+      sqrtPriceLimitX96: 4880412434988856429110099968n,
+      maxMintSlippageRate: lpManager.toOnChainRate(0.03),
+      tickLower: -58680n,
+      tickUpper: -56640n,
+      R_Q96: 252704211256043437387939840n,
+      amount0: ethers.parseEther("0"),
+      amount1: amount,
+      searchRange: {
+        swapInLow: ethers.parseEther("0.004956984791606578"),
+        swapInHigh: ethers.parseEther("0.004971855745981397"),
+        searchLoopNum: 5,
+      },
+    };
+
+    await lpManager.useCaller(balancer);
+
+    let positionChange = await lpManager.rebalance1For0(rebalanceParams);
+
+    // increase liquidity
+    let amount0 = ethers.parseEther("33");
+    let amount1 = ethers.parseEther("0.1");
+
+    await lpManager.useCaller(liquidityOwner);
+
+    await lpManager.increaseAllowanceIfNeeded(uniswap.token0, amount0);
+    await lpManager.increaseAllowanceIfNeeded(uniswap.token1, amount1);
+
+    const params = {
+      amount0,
+      amount1,
+      slippage: 0.99,
+    };
+    positionChange = await lpManager.increaseLiquidity(
+      positionChange.positionKey,
+      params
+    );
+    expect(positionChange.change).to.be.eq(PositionChange.Increase);
+
+    // decrease liquidity
+    amount0 = ethers.parseEther("15");
+    amount1 = ethers.parseEther("0.05");
+
+    const position = await lpManager.getPosition(positionChange.positionKey);
+
+    const decreaseParams = {
+      newLiquidity: position.liquidity / BigInt(2),
+      amount0,
+      amount1,
+    };
+
+    positionChange = await lpManager.decreaseLiquidity(
+      positionChange.positionKey,
+      decreaseParams
+    );
+    expect(positionChange.change).to.be.eq(PositionChange.Descrese);
+
+    // close postion
+    positionChange = await lpManager.closePosition(positionChange.positionKey);
+    expect(positionChange.change).to.be.eq(PositionChange.Closed);
   });
 
   it("rebalance 0 for 1 - new position created", async () => {
@@ -374,6 +450,82 @@ describe("UniswapV3LpManager - After Init", () => {
     expect(positionChange.change).to.eq(PositionChange.Create);
     withinPercentageDiff(positionChange.amount0, expectedPosition0, 0.01);
     withinPercentageDiff(positionChange.amount1, expectedPosition1, 0.01);
+
+    const position = await lpManager.getPosition(positionChange.positionKey);
+    expect(position.tokenPairId).to.be.eq(tokenPairId);
+  });
+
+  it("rebalance 0 for 1 - follow up operations ok", async () => {
+    const { lpManager, uniswap, balancer, liquidityOwner } = testSetup;
+    // sending 1 token1 to the contract to simulate rebalance close is already called
+    const amount = ethers.parseEther("1");
+    const token0 = await loadContract("IERC20", uniswap.token0, liquidityOwner);
+
+    await token0.transfer(await lpManager.innerContract.getAddress(), amount);
+
+    // now, off chain calculation based on current liquidity and price sqrt
+    const rebalanceParams = {
+      tokenPairId,
+      // local testing, no need slippage protection
+      sqrtPriceLimitX96: 4303636419944718166428483584n,
+      maxMintSlippageRate: lpManager.toOnChainRate(0.03),
+      tickLower: -58680n,
+      tickUpper: -56640n,
+      R_Q96: 252704211256043437387939840n,
+      amount0: amount,
+      amount1: ethers.parseEther("0"),
+      searchRange: {
+        swapInLow: ethers.parseEther("0.5042192936211579"),
+        swapInHigh: ethers.parseEther("0.5057319515020213"),
+        searchLoopNum: 5,
+      },
+    };
+
+    await lpManager.useCaller(balancer);
+
+    let positionChange = await lpManager.rebalance0For1(rebalanceParams);
+
+    // increase liquidity
+    let amount0 = ethers.parseEther("33");
+    let amount1 = ethers.parseEther("0.1");
+
+    await lpManager.useCaller(liquidityOwner);
+
+    await lpManager.increaseAllowanceIfNeeded(uniswap.token0, amount0);
+    await lpManager.increaseAllowanceIfNeeded(uniswap.token1, amount1);
+
+    const params = {
+      amount0,
+      amount1,
+      slippage: 0.99,
+    };
+    positionChange = await lpManager.increaseLiquidity(
+      positionChange.positionKey,
+      params
+    );
+    expect(positionChange.change).to.be.eq(PositionChange.Increase);
+
+    // decrease liquidity
+    amount0 = ethers.parseEther("15");
+    amount1 = ethers.parseEther("0.05");
+
+    const position = await lpManager.getPosition(positionChange.positionKey);
+
+    const decreaseParams = {
+      newLiquidity: position.liquidity / BigInt(2),
+      amount0,
+      amount1,
+    };
+
+    positionChange = await lpManager.decreaseLiquidity(
+      positionChange.positionKey,
+      decreaseParams
+    );
+    expect(positionChange.change).to.be.eq(PositionChange.Descrese);
+
+    // close postion
+    positionChange = await lpManager.closePosition(positionChange.positionKey);
+    expect(positionChange.change).to.be.eq(PositionChange.Closed);
   });
 });
 
