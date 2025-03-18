@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 /// @notice The token pair on uniswap
 struct TokenPair {
     uint8 id;
+    address pool;
     address token0;
     address token1;
     uint24 poolFee;
@@ -19,7 +20,7 @@ library LibTokenId {
 
 interface IUniswapV3TokenPairs {
     /// @dev returns the full token pair information by id
-    function getTokenPair(uint8 _id) external returns (TokenPair memory);
+    function getTokenPair(uint8 _id) external view returns (TokenPair memory);
 
     function getTokenPairId(
         address _token0,

@@ -13,6 +13,13 @@ library LibPercentageMath {
         return (num * uint256(rate)) / 1000;
     }
 
+    function deductRate(
+        uint256 num,
+        uint16 rate
+    ) internal pure returns (uint256) {
+        return (num * uint256(percentage100() - rate)) / 1000;
+    }
+
     function multiplyU128(
         uint128 num,
         uint16 rate

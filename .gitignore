@@ -3,8 +3,11 @@ ethereum/artifacts
 ethereum/cache
 ethereum/typechain-types
 ethereum/.env
+ethereum/coverage.json
+ethereum/coverage
 
 analysis/bin
 analysis/include
 analysis/lib
 analysis/pyvenv.cfg
+.DS_Store
