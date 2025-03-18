@@ -61,7 +61,7 @@ library LibPositionTracker {
         return (self.positionKeys.contains(positionKey), positionKey);
     }
 
-    function tryInsertNewPositionKey(
+    function tryInsertNewPosition(
         PositionTracker storage self,
         uint8 _tokenPairId,
         int24 _tickLower,
@@ -72,7 +72,13 @@ library LibPositionTracker {
         if (self.positionKeys.contains(positionKey)) {
             revert PostionAlreadyExists(_tickLower, _tickUpper);
         }
+
         self.positionKeys.add(positionKey);
+        self.positions[positionKey] = Position({
+            tokenPairId: _tokenPairId,
+            tickLower: _tickLower,
+            tickUpper: _tickUpper
+        });
     }
 
     function remove(

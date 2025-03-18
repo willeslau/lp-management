@@ -153,7 +153,7 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         _transferFundsAndApprove(tokenPair.token0, _params.amount0Desired);
         _transferFundsAndApprove(tokenPair.token1, _params.amount1Desired);
 
-        bytes32 positionKey = positionTracker.tryInsertNewPositionKey(
+        bytes32 positionKey = positionTracker.tryInsertNewPosition(
             tokenPair.id,
             _params.tickLower,
             _params.tickUpper
@@ -163,13 +163,6 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
 
         _refund(tokenPair.token0, _params.amount0Desired, output.amount0);
         _refund(tokenPair.token1, _params.amount1Desired, output.amount1);
-
-        positionTracker.setPositionKeyData(
-            positionKey,
-            _tokenPairId,
-            _params.tickLower,
-            _params.tickUpper
-        );
 
         emit PositionChanged(
             _tokenPairId,
@@ -330,7 +323,7 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
             });
             output = _mint(tokenPair, params);
 
-            positionKey = positionTracker.tryInsertNewPositionKey(
+            positionKey = positionTracker.tryInsertNewPosition(
                 tokenPair.id,
                 _params.tickLower,
                 _params.tickUpper
@@ -408,7 +401,7 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
             });
             output = _mint(tokenPair, params);
 
-            positionKey = positionTracker.tryInsertNewPositionKey(
+            positionKey = positionTracker.tryInsertNewPosition(
                 tokenPair.id,
                 _params.tickLower,
                 _params.tickUpper
