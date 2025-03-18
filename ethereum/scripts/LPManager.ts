@@ -263,11 +263,7 @@ export class LPManager {
         positionKey: string, 
         amount0Min: bigint = BigInt(0), 
         amount1Min: bigint = BigInt(0)
-    ): Promise<{
-        amount0: bigint;
-        amount1: bigint;
-        change: PositionChange;
-    }> {
+    ): Promise<PositionChanged> {
         const tx = await this.innerContract.closePosition(positionKey, amount0Min, amount1Min);
         const receipt = await tx.wait();
         return this.parsePositionChangedLog(receipt.logs);
