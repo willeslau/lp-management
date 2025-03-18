@@ -10,11 +10,13 @@
     "coverage": "npx hardhat coverage",
     "clean": "npx hardhat clean && rm -rf artifacts cache coverage type-chains",
 
+    "lpManager::list": "npx hardhat run scripts/lpManager/list.ts --network ${NETWORK}",
     "lpManager::mint": "npx hardhat run scripts/lpManager/mint.ts --network ${NETWORK}",
     "lpManager::rebalance0for1": "npx hardhat run scripts/lpManager/rebalance0for1.ts --network ${NETWORK}",
     "lpManager::rebalance1for0": "npx hardhat run scripts/lpManager/rebalance1for0.ts --network ${NETWORK}",
     "lpManager::rebalanceClose": "npx hardhat run scripts/lpManager/rebalanceClose.ts --network ${NETWORK}",
     "lpManager::deploy": "npx hardhat run scripts/lpManager/deploy.ts --network ${NETWORK}",
+    
     "supportedToken::deploy": "npx hardhat run scripts/supportedTokens/deploy.ts --network ${NETWORK}",
     "supportedToken::addTokenPair": "npx hardhat run scripts/supportedTokens/addTokenPair.ts --network ${NETWORK}",
     "lpSwap::swap1for0Debug": "npx hardhat run scripts/liquiditySwap/swap1for0Debug.ts --network ${NETWORK}",

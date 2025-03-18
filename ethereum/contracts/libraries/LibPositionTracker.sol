@@ -36,6 +36,11 @@ library LibPositionTracker {
         uint256 _end
     ) internal view returns (bytes32[] memory data) {
         uint256 l = length(self);
+        
+        if (l == 0) {
+            return data;
+        }
+
         _end = _end >= l ? l - 1 : _end;
 
         data = new bytes32[](_end - _start + 1);
