@@ -132,10 +132,15 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         operationalParams.protocolFeeRate = _newRate;
     }
 
+    function listPositionKeys(uint256 _start, uint256 _end) external view returns (uint256 total, bytes32[] memory keys) {
+        total = positionTracker.length();
+        keys = positionTracker.list(_start, _end);
+    }
+
     function mint(
         uint8 _tokenPairId,
         MintParams calldata _params
-    ) external payable onlyLiquidityOwner {
+    ) external onlyLiquidityOwner {
         TokenPair memory tokenPair = _ensureValidTokenPair(_tokenPairId);
 
         _transferFundsAndApprove(tokenPair.token0, _params.amount0Desired);
@@ -175,7 +180,7 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         uint256 _amount1Desired,
         uint256 _amount0Min,
         uint256 _amount1Min
-    ) external payable onlyLiquidityOwner {
+    ) external onlyLiquidityOwner {
         TokenPair memory tokenPair = _ensureValidPosition(
             _positionKey
         );
@@ -215,7 +220,7 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         uint128 _newLiquidity,
         uint256 _amount0Min,
         uint256 _amount1Min
-    ) external payable onlyLiquidityOwner {
+    ) external onlyLiquidityOwner {
         TokenPair memory tokenPair = _ensureValidPosition(
             _positionKey
         );
