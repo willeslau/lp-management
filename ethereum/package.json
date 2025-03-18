@@ -8,7 +8,7 @@
     "test-specific": "ENV=unit-test npx hardhat test --grep",
     "test": "ENV=unit-test npx hardhat test",
     "coverage": "npx hardhat coverage",
-    "clean": "npx hardhat clean && rm -rf artifacts cache coverage",
+    "clean": "npx hardhat clean && rm -rf artifacts cache coverage type-chains",
 
     "lpManager::mint": "npx hardhat run scripts/lpManager/mint.ts --network ${NETWORK}",
     "lpManager::rebalance0for1": "npx hardhat run scripts/lpManager/rebalance0for1.ts --network ${NETWORK}",
