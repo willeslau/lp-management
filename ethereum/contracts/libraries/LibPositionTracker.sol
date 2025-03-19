@@ -96,20 +96,6 @@ library LibPositionTracker {
         self.positionKeys.remove(_positionKey);
     }
 
-    function setPositionKeyData(
-        PositionTracker storage self,
-        bytes32 _positionKey,
-        uint8 _tokenPairId,
-        int24 _tickLower,
-        int24 _tickUpper
-    ) internal {
-        self.positions[_positionKey] = Position({
-            tokenPairId: _tokenPairId,
-            tickLower: _tickLower,
-            tickUpper: _tickUpper
-        });
-    }
-
     function getPositionTokenPair(
         PositionTracker storage self,
         bytes32 _positionKey

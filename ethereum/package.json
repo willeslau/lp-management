@@ -17,6 +17,7 @@
     "lpManager::rebalanceClose": "npx hardhat run scripts/lpManager/rebalanceClose.ts --network ${NETWORK}",
     "lpManager::deploy": "npx hardhat run scripts/lpManager/deploy.ts --network ${NETWORK}",
     "lpManager::getPositionInfo": "npx hardhat run scripts/lpManager/getPositionInfo.ts --network ${NETWORK}",
+    "lpManager::checkUniswapPosition": "npx hardhat run scripts/lpManager/checkUniswapPosition.ts --network ${NETWORK}",
 
     "supportedToken::deploy": "npx hardhat run scripts/supportedTokens/deploy.ts --network ${NETWORK}",
     "supportedToken::addTokenPair": "npx hardhat run scripts/supportedTokens/addTokenPair.ts --network ${NETWORK}",

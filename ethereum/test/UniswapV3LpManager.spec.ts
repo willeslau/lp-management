@@ -688,14 +688,11 @@ describe("UniswapV3LpManager - More Cases", () => {
   it("should emit PositionChanged event on mint", async () => {
     const { lpManager, uniswap, liquidityOwner } = testSetup;
 
-    const tokenPairId = 1;
-
     const result = await setupInitialPosition(
       lpManager,
       uniswap,
       liquidityOwner
     );
-    expect(result.tokenPair).to.eq(tokenPairId);
     expect(result.change).to.eq(PositionChange.Create);
   });
 
@@ -942,60 +939,6 @@ describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
     ).to.be.revertedWithCustomError(
       lpManager.innerContract,
       "NotLiquidityOwner"
-    );
-  });
-
-  it("should collect fees successfully for a valid position", async () => {
-    const { lpManager, uniswap, liquidityOwner } = testSetup;
-    lpManager.useCaller(liquidityOwner);
-
-    const token0 = await loadContract("IERC20", uniswap.token0, liquidityOwner);
-    const token1 = await loadContract("IERC20", uniswap.token1, liquidityOwner);
-    const liquidityOwnerAddress = await liquidityOwner.getAddress();
-
-    // Record initial balances
-    const token0InitialBalance = await token0.balanceOf(liquidityOwnerAddress);
-    const token1InitialBalance = await token1.balanceOf(liquidityOwnerAddress);
-
-    // Collect fees
-    await expect(
-      lpManager.innerContract.collectAllFees(initialPosition.positionKey)
-    )
-      .to.emit(lpManager.innerContract, "FeesCollected")
-      .withArgs(initialPosition.positionKey, 0, 0);
-
-    // Verify balances after fee collection
-    const token0AfterBalance = await token0.balanceOf(liquidityOwnerAddress);
-    const token1AfterBalance = await token1.balanceOf(liquidityOwnerAddress);
-    expect(token0AfterBalance).to.be.gte(token0InitialBalance);
-    expect(token1AfterBalance).to.be.gte(token1InitialBalance);
-  });
-
-  it("should revert when non-liquidity owner calls collectAllFees", async () => {
-    const { lpManager, user } = testSetup;
-    lpManager.useCaller(user);
-
-    await expect(
-      lpManager.innerContract.collectAllFees(initialPosition.positionKey)
-    ).to.be.revertedWithCustomError(
-      lpManager.innerContract,
-      "NotLiquidityOwner"
-    );
-  });
-
-  it("should revert with invalid position key", async () => {
-    const { lpManager, liquidityOwner } = testSetup;
-    const invalidPositionKey = ethers.keccak256(
-      ethers.toUtf8Bytes("invalid_position")
-    );
-
-    lpManager.useCaller(liquidityOwner);
-
-    await expect(
-      lpManager.innerContract.collectAllFees(invalidPositionKey)
-    ).to.be.revertedWithCustomError(
-      lpManager.innerContract,
-      "InvalidPositionKey"
     );
   });
 });

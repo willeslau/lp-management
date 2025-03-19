@@ -20,6 +20,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 /// @notice Manages Uniswap V3 liquidity positions
 /// copy from https://github.com/Uniswap/v3-periphery/blob/0.8/contracts/NonfungiblePositionManager.sol
 contract UniswapV3PoolsProxy is CallbackUtil, IUniswapV3MintCallback {
+    uint128 constant UINT128_MAX = 340282366920938463463374607431768211455;
     using SafeERC20 for IERC20;
 
     struct MintCallbackData {
@@ -28,6 +29,7 @@ contract UniswapV3PoolsProxy is CallbackUtil, IUniswapV3MintCallback {
     }
 
     error PriceSlippageCheck();
+    error U128Overflow(uint256 num);
 
     /// @inheritdoc IUniswapV3MintCallback
     function uniswapV3MintCallback(
@@ -47,7 +49,7 @@ contract UniswapV3PoolsProxy is CallbackUtil, IUniswapV3MintCallback {
         TokenPair memory _tokenPair,
         MintParams memory _mintParams
     ) internal returns (LiquidityChangeOutput memory mintOutput) {
-        (, uint256 amount0, uint256 amount1) = _addLiquidity(
+        return _addLiquidity(
             _tokenPair,
             _mintParams.tickLower,
             _mintParams.tickUpper,
@@ -56,29 +58,27 @@ contract UniswapV3PoolsProxy is CallbackUtil, IUniswapV3MintCallback {
             _mintParams.amount0Min,
             _mintParams.amount1Min
         );
-
-        mintOutput.amount0 = amount0;
-        mintOutput.amount1 = amount1;
     }
 
-    function _increaseLiquidity(
-        TokenPair memory tokenPair,
+    function _burnWithSlippageCheck(
+        IUniswapV3Pool _pool,
+        uint128 _liquidityReduction,
         int24 _tickLower,
         int24 _tickUpper,
-        uint256 amount0Desired,
-        uint256 amount1Desired,
-        uint256 amount0Min,
-        uint256 amount1Min
+        uint256 _amount0Min,
+        uint256 _amount1Min
     ) internal returns (LiquidityChangeOutput memory output) {
-        (, uint256 amount0, uint256 amount1) = _addLiquidity(
-            tokenPair,
+        (uint256 amount0, uint256 amount1) = _pool.burn(
             _tickLower,
             _tickUpper,
-            amount0Desired,
-            amount1Desired,
-            amount0Min,
-            amount1Min
+            _liquidityReduction
         );
+
+        if (
+            amount0 < _amount0Min || amount1 < _amount1Min
+        ) {
+            revert PriceSlippageCheck();
+        }
 
         output.amount0 = amount0;
         output.amount1 = amount1;
@@ -117,22 +117,42 @@ contract UniswapV3PoolsProxy is CallbackUtil, IUniswapV3MintCallback {
         output.amount1 = uint256(amount1Collected);
     }
 
-    function _collect(
+    function _safeCollect(
         IUniswapV3Pool _pool,
+        address _recipient,
         int24 _tickLower,
-        int24 _tickUpper
+        int24 _tickUpper,
+        uint256 _amount0Requested,
+        uint256 _amount1Requested
     ) internal returns (uint256 amount0, uint256 amount1) {
-        (, , , uint128 fee0, uint128 fee1) = _position(
-            _pool,
-            _tickLower,
-            _tickUpper
-        );
         (amount0, amount1) = _pool.collect(
-            address(this),
+            _recipient,
             _tickLower,
             _tickUpper,
-            fee0,
-            fee1
+            _toU128(_amount0Requested),
+            _toU128(_amount1Requested)
+        );
+    }
+
+    function _toU128(uint256 _num) internal pure returns (uint128 v) {
+        v = uint128(_num);
+        if (uint256(v) != _num) {
+            revert U128Overflow(_num);
+        }
+    }
+
+    function _collectAll(
+        IUniswapV3Pool _pool,
+        address _recipient,
+        int24 _tickLower,
+        int24 _tickUpper
+    ) internal returns (uint128 amount0, uint128 amount1) {
+        (amount0, amount1) = _pool.collect(
+            _recipient,
+            _tickLower,
+            _tickUpper,
+            UINT128_MAX,
+            UINT128_MAX
         );
     }
 
@@ -145,10 +165,11 @@ contract UniswapV3PoolsProxy is CallbackUtil, IUniswapV3MintCallback {
         uint256 _amount1Desired,
         uint256 _amount0Min,
         uint256 _amount1Min
-    ) internal returns (uint128 liquidity, uint256 amount0, uint256 amount1) {
+    ) internal returns (LiquidityChangeOutput memory output) {
         IUniswapV3Pool pool = IUniswapV3Pool(_tokenPair.pool);
 
         // compute the liquidity amount
+        uint128 liquidity;
         {
             (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
             uint160 sqrtRatioAX96 = TickMath.getSqrtRatioAtTick(_tickLower);
@@ -170,7 +191,7 @@ contract UniswapV3PoolsProxy is CallbackUtil, IUniswapV3MintCallback {
                 token1: _tokenPair.token1
             })
         );
-        (amount0, amount1) = pool.mint(
+        (output.amount0 , output.amount1) = pool.mint(
             address(this),
             _tickLower,
             _tickUpper,
@@ -178,8 +199,23 @@ contract UniswapV3PoolsProxy is CallbackUtil, IUniswapV3MintCallback {
             m
         );
 
-        if (amount0 < _amount0Min || amount1 < _amount1Min)
-            revert PriceSlippageCheck();
+        if (output.amount0 < _amount0Min || output.amount1 < _amount1Min) revert PriceSlippageCheck();
+    }
+
+    function _tokensOwned(
+        IUniswapV3Pool _pool,
+        int24 _tickLower,
+        int24 _tickUpper
+    )
+        internal
+        view
+        returns (
+            uint128 tokensOwed0,
+            uint128 tokensOwed1
+        )
+    {
+        bytes32 uniswapPositionKey = _uniswapPositionKey(_tickLower, _tickUpper);
+        (, , , tokensOwed0, tokensOwed1) = _pool.positions(uniswapPositionKey);
     }
 
     function _position(
@@ -197,11 +233,7 @@ contract UniswapV3PoolsProxy is CallbackUtil, IUniswapV3MintCallback {
             uint128 tokensOwed1
         )
     {
-        bytes32 uniswapPositionKey = PositionKey.compute(
-            address(this),
-            _tickLower,
-            _tickUpper
-        );
+        bytes32 uniswapPositionKey = _uniswapPositionKey(_tickLower, _tickUpper);
 
         (liquidity, , , tokensOwed0, tokensOwed1) = _pool.positions(
             uniswapPositionKey
@@ -220,17 +252,23 @@ contract UniswapV3PoolsProxy is CallbackUtil, IUniswapV3MintCallback {
         );
     }
 
+    function _uniswapPositionKey(
+        int24 _tickLower,
+        int24 _tickUpper
+    ) internal view returns(bytes32) {
+        return PositionKey.compute(
+            address(this),
+            _tickLower,
+            _tickUpper
+        );
+    }
+
     function _positionLiquidity(
         IUniswapV3Pool _pool,
         int24 _tickLower,
         int24 _tickUpper
     ) public view returns (uint128 liquidity) {
-        bytes32 uniswapPositionKey = PositionKey.compute(
-            address(this),
-            _tickLower,
-            _tickUpper
-        );
-
+        bytes32 uniswapPositionKey = _uniswapPositionKey(_tickLower, _tickUpper);
         (liquidity, , , , ) = _pool.positions(uniswapPositionKey);
     }
 }
