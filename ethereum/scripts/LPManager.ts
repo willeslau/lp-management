@@ -201,7 +201,7 @@ export class LPManager {
         // c.interface.decodeErrorResult()
     }
 
-    private parsePositionChangedLog(logs: any[]): Promise<PositionChanged> {
+    private parsePositionChangedLog(logs: any[]): PositionChanged {
         let amount0 = BigInt(0);
         let amount1 = BigInt(0);
         let positionKey = undefined;

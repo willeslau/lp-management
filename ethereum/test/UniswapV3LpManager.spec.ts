@@ -698,6 +698,112 @@ describe("UniswapV3LpManager - More Cases", () => {
     expect(result.tokenPair).to.eq(tokenPairId);
     expect(result.change).to.eq(PositionChange.Create);
   });
+
+  it("should completely remove position after closePosition", async () => {
+    const { lpManager, uniswap, liquidityOwner } = testSetup;
+    const initialPosition = await setupInitialPosition(
+      lpManager,
+      uniswap,
+      liquidityOwner
+    );
+
+    lpManager.useCaller(liquidityOwner);
+    await lpManager.closePosition(initialPosition.positionKey);
+
+    // Verify position is completely removed
+    await expect(
+      lpManager.getPosition(initialPosition.positionKey)
+    ).to.be.revertedWithCustomError(lpManager.innerContract, "InvalidPositionKey");
+
+    // Verify position is not in the list
+    const positions = await lpManager.listPositionKeys(0, 0);
+    expect(positions.totalPositions).to.eq(0);
+  });
+
+  it("should allow creating new position after closePosition with same parameters", async () => {
+    const { lpManager, uniswap, liquidityOwner } = testSetup;
+    const initialPosition = await setupInitialPosition(
+      lpManager,
+      uniswap,
+      liquidityOwner
+    );
+
+    lpManager.useCaller(liquidityOwner);
+    await lpManager.closePosition(initialPosition.positionKey);
+
+    // Create new position with same parameters
+    const tokenPairId = 1;
+    const amount0 = ethers.parseEther("312.5");
+    const amount1 = ethers.parseEther("1");
+    const tickLower = BigInt(-58140);
+    const tickUpper = BigInt(-56640);
+    const slippage = 0.999;
+
+    await lpManager.increaseAllowanceIfNeeded(uniswap.token0, amount0);
+    await lpManager.increaseAllowanceIfNeeded(uniswap.token1, amount1);
+
+    const params = lpManager.createMintParams(
+      tickLower,
+      tickUpper,
+      amount0,
+      amount1,
+      slippage
+    );
+    const result = await lpManager.mintNewPosition(tokenPairId, params);
+    expect(result.change).to.eq(PositionChange.Create);
+
+    // Verify new position is created successfully
+    const position = await lpManager.getPosition(result.positionKey);
+    expect(position.tickLower).to.eq(tickLower);
+    expect(position.tickUpper).to.eq(tickUpper);
+  });
+
+  it("should support liquidity operations on minted position", async () => {
+    const { lpManager, uniswap, liquidityOwner } = testSetup;
+    const initialPosition = await setupInitialPosition(
+      lpManager,
+      uniswap,
+      liquidityOwner
+    );
+    const initialLiquidity = (await lpManager.getPosition(initialPosition.positionKey)).liquidity;
+
+    // Increase liquidity
+    const amount0ToAdd = ethers.parseEther("100");
+    const amount1ToAdd = ethers.parseEther("0.3");
+    await lpManager.increaseAllowanceIfNeeded(uniswap.token0, amount0ToAdd);
+    await lpManager.increaseAllowanceIfNeeded(uniswap.token1, amount1ToAdd);
+
+    const increaseParams = {
+      amount0: amount0ToAdd,
+      amount1: amount1ToAdd,
+      slippage: 0.99,
+    };
+    const increaseResult = await lpManager.increaseLiquidity(
+      initialPosition.positionKey,
+      increaseParams
+    );
+    expect(increaseResult.change).to.eq(PositionChange.Increase);
+
+    // Verify liquidity increased
+    const positionAfterIncrease = await lpManager.getPosition(initialPosition.positionKey);
+    expect(positionAfterIncrease.liquidity).to.be.gt(initialLiquidity);
+
+    // Decrease liquidity
+    const decreaseParams = {
+      newLiquidity: positionAfterIncrease.liquidity / BigInt(2),
+      amount0: ethers.parseEther("50"),
+      amount1: ethers.parseEther("0.15"),
+    };
+    const decreaseResult = await lpManager.decreaseLiquidity(
+      initialPosition.positionKey,
+      decreaseParams
+    );
+    expect(decreaseResult.change).to.eq(PositionChange.Descrese);
+
+    // Verify liquidity decreased
+    const positionAfterDecrease = await lpManager.getPosition(initialPosition.positionKey);
+    expect(positionAfterDecrease.liquidity).to.be.lt(positionAfterIncrease.liquidity);
+  });
 });
 
 describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
