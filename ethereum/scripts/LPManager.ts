@@ -83,6 +83,40 @@ export class LPManager {
         this.innerContract = this.innerContract.connect(caller);
     }
 
+    public async deactive(): Promise<void> {
+        await this.innerContract.setDeactivation(true);
+    }
+
+    public async escapeHatchBurn(
+        pool: string,
+        liqiudity: bigint,
+        tickLower: bigint,
+        tickUpper: bigint,
+        amount0Min: bigint,
+        amount1Min: bigint
+    ): Promise<void> {
+        await this.innerContract.escapeHatchBurn(
+            pool,
+            liqiudity,
+            tickLower,
+            tickUpper,
+            amount0Min,
+            amount1Min,
+        );
+    }
+
+    public async escapeHatchCollect(
+        pool: string,
+        tickLower: bigint,
+        tickUpper: bigint,
+    ): Promise<void> {
+        await this.innerContract.escapeHatchCollect(
+            pool,
+            tickLower,
+            tickUpper,
+        );
+    }
+
     public async getPosition(positionKey: string): Promise<LpPosition> {
         const pos = await this.innerContract.position(positionKey);
         return {
@@ -206,7 +240,6 @@ export class LPManager {
         let amount1 = BigInt(0);
         let positionKey = undefined;
         let change = PositionChange.Closed;
-        let tokenPair = 0;
 
         logs.forEach((log: any) => {
             try {
@@ -214,12 +247,11 @@ export class LPManager {
               const parsedLog = this.innerContract.interface.parseLog(log)!;
     
               if (parsedLog.name === "PositionChanged") {
-                tokenPair = parsedLog.args[0];
-                positionKey = parsedLog.args[1];
-                amount0 = parsedLog.args[3];
-                amount1 = parsedLog.args[4];
+                positionKey = parsedLog.args[0];
+                amount0 = parsedLog.args[2];
+                amount1 = parsedLog.args[3];
 
-                const c = Number(parsedLog.args[2]);
+                const c = Number(parsedLog.args[1]);
                 if (c === 0) {
                     change = PositionChange.Create;
                 } else if (c === 1) {
@@ -246,7 +278,6 @@ export class LPManager {
         }
 
         return {
-            tokenPair,
             change,
             amount0,
             amount1,
@@ -278,7 +309,6 @@ export enum PositionChange {
 }
 
 export interface PositionChanged {
-    tokenPair: number,
     positionKey: string,
     change: PositionChange,
     amount0: bigint,

@@ -30,9 +30,14 @@ async function main() {
     console.log(`Account balance: ${balance.toString()}`);
 
     const contract = await loadContract('UniswapV3LpManager', contractAddress, deployer);
+    
+    const r = contract.interface.getFunction("0xa5a1f2ec")!;
+    console.log(contract.interface.decodeFunctionData(r, "0xa5a1f2ec000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000e309d3aae05290000000000000000000000000000000000000000000000000000000000000000000000001effffffffffffffffffffffffffffffffffffffffffffffffffffffffffff1e88ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff2ab8000000000000000000000000000000000000000000000000167775d819536f090000000000000000000000000000000000000000000000000003124d4fb3efd900000000000000000000000000000000000000000028629b8939bafc000000000000000000000000000000000000000000000000000000000079c90f5cc38800000000000000000000000000000000000000000000000000007a45dc621eb000000000000000000000000000000000000000000000000000000000000000000a"));
+    
+    
     const lpManager = new LPManager(contract);
 
-    await lpManager.useCaller(deployer);
+    // await lpManager.useCaller(deployer);
 
     // now, off chain calculation based on current liquidity and price sqrt
     const rebalanceParams = {
@@ -52,13 +57,9 @@ async function main() {
     // const positionChange = await lpManager.rebalance0For1(rebalanceParams);
     // console.log(positionChange);
 
-    console.log(
-      lpManager.innerContract.interface.decodeEventLog("0x4fd5f42d6055d4d215e98d4114cf26f10926c2fcd0b2d1092c14c79f6183444a", "0x00000000000000000000000000000000000000000000000000000000000000011e109bde0211e4fe9880a82fa2b5a14eb76e0fdc23022e8b722c2135b6b493840000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000019a688a344d94120000000000000000000000000000000000000000000000000000ca9986791aba000000000000000000000000cfa0f6e399e6da4201fdcbecf2ebfdfb1202a838")
-    );
-
-    console.log(
-      await lpManager.getPosition("0x1e109bde0211e4fe9880a82fa2b5a14eb76e0fdc23022e8b722c2135b6b49384")
-    );
+    // console.log(
+    //   await lpManager.getPosition("0x1e109bde0211e4fe9880a82fa2b5a14eb76e0fdc23022e8b722c2135b6b49384")
+    // );
 
     process.exit(0);
   } catch (error) {
