@@ -2,11 +2,11 @@ import { ethers } from 'hardhat';
 import { loadContract } from '../util';
 import { LPManager } from '../LPManager';
 
-const contractAddress = "0x6E3aC11F344BE1B91E433Cc543231187d8E30F99";
-const positionKey = "0xef766d62d0a9eca567b5a68293ba0dc3c72bfabf8afbfeadca314f4dfeaaceed";
+const contractAddress = "0xA7Fc9aA1a78c2560611A968A44473c9872093b98";
+const positionKey = "0x868104b0bc6baf84a4322c1c568ba5195a82dd65a87742667731333656da8f10";
 
-const amount0 = ethers.parseEther("0.8");
-const amount1 = ethers.parseEther("0.003");
+const amount0 = ethers.parseEther("0");
+const amount1 = ethers.parseEther("0");
 
 async function main() {
   try {
@@ -25,7 +25,7 @@ async function main() {
     const params = {
         amount0Min: amount0,
         amount1Min: amount1,
-        compoundFee: true
+        compoundFee: false
     };
 
     const positionChange = await lpManager.rebalanceClosePosition(positionKey, params);

@@ -36,7 +36,7 @@ library LibPositionTracker {
         uint256 _end
     ) internal view returns (bytes32[] memory data) {
         uint256 l = length(self);
-        
+
         if (l == 0) {
             return data;
         }
@@ -93,6 +93,7 @@ library LibPositionTracker {
         Position storage position = self.positions[_positionKey];
         if (position.tokenPairId == 0) revert PositionNotCleared();
         delete self.positions[_positionKey];
+        self.positionKeys.remove(_positionKey);
     }
 
     function setPositionKeyData(
