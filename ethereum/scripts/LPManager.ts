@@ -83,6 +83,40 @@ export class LPManager {
         this.innerContract = this.innerContract.connect(caller);
     }
 
+    public async deactive(): Promise<void> {
+        await this.innerContract.setDeactivation(true);
+    }
+
+    public async escapeHatchBurn(
+        pool: string,
+        liqiudity: bigint,
+        tickLower: bigint,
+        tickUpper: bigint,
+        amount0Min: bigint,
+        amount1Min: bigint
+    ): Promise<void> {
+        await this.innerContract.escapeHatchBurn(
+            pool,
+            liqiudity,
+            tickLower,
+            tickUpper,
+            amount0Min,
+            amount1Min,
+        );
+    }
+
+    public async escapeHatchCollect(
+        pool: string,
+        tickLower: bigint,
+        tickUpper: bigint,
+    ): Promise<void> {
+        await this.innerContract.escapeHatchCollect(
+            pool,
+            tickLower,
+            tickUpper,
+        );
+    }
+
     public async getPosition(positionKey: string): Promise<LpPosition> {
         const pos = await this.innerContract.position(positionKey);
         return {

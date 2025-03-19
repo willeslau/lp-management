@@ -95,6 +95,8 @@ interface InitialPositionResult {
   liquidity: bigint;
   fee0: bigint;
   fee1: bigint;
+  tickLower: bigint;
+  tickUpper: bigint;
 }
 
 async function setupInitialPosition(
@@ -129,6 +131,8 @@ async function setupInitialPosition(
     liquidity: position.liquidity,
     fee0: position.fee0,
     fee1: position.fee1,
+    tickLower,
+    tickUpper
   };
 }
 
@@ -149,9 +153,48 @@ describe("UniswapV3LpManager - Init", () => {
     );
     expect(initialPosition.fee0).to.eq(0);
     expect(initialPosition.fee1).to.eq(0);
-    // TODO: the should be equal, but might be differ by 1 wei due to precision issues
-    // expect(queryResult.amount0).to.eq(result.amount0);
-    // expect(queryResult.amount1).to.eq(result.amount1);
+  });
+
+  it("escape hatch works", async () => {
+    const { lpManager, uniswap, liquidityOwner, balancer } = testSetup;
+
+    const initialPosition = await setupInitialPosition(
+      lpManager,
+      uniswap,
+      liquidityOwner
+    );
+    expect(initialPosition.fee0).to.eq(0);
+    expect(initialPosition.fee1).to.eq(0);
+
+    lpManager.useCaller(balancer);
+    await lpManager.deactive();
+
+    const token0 = await loadContract("IERC20", uniswap.token0, liquidityOwner);
+    const token1 = await loadContract("IERC20", uniswap.token1, liquidityOwner);
+    const token0InitialBalance = await token0.balanceOf(await liquidityOwner.getAddress());
+    const token1InitialBalance = await token1.balanceOf(await liquidityOwner.getAddress());
+
+    await lpManager.escapeHatchBurn(
+      await uniswap.pool.getAddress(),
+      initialPosition.liquidity,
+      initialPosition.tickLower,
+      initialPosition.tickUpper,
+      BigInt(0),
+      BigInt(0)
+    );
+
+    await lpManager.escapeHatchCollect(
+      await uniswap.pool.getAddress(),
+      initialPosition.tickLower,
+      initialPosition.tickUpper,
+    );
+
+    const token0AfterBalance = await token0.balanceOf(await liquidityOwner.getAddress());
+    const token1AfterBalance = await token1.balanceOf(await liquidityOwner.getAddress());
+
+    const calculationInaccuracy =  BigInt(1);
+    expect(token0AfterBalance + calculationInaccuracy).to.be.eq(token0InitialBalance + initialPosition.amount0);
+    expect(token1AfterBalance + calculationInaccuracy).to.be.eq(token1InitialBalance + initialPosition.amount1);
   });
 });
 
