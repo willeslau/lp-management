@@ -3,7 +3,6 @@ import { loadContract } from '../util';
 import { LPManager } from '../LPManager';
 
 const contractAddress = "0xCf38bE613203B39a14D2Fb3c1A345122ec0a4351";
-const positionKey = "0x6a088a1318528dc79f2c4c0b40a2c2113679ae5bcc2deed489183fa11b5a1233";
 
 async function main() {
   try {
@@ -16,8 +15,7 @@ async function main() {
 
     const contract = await loadContract('UniswapV3LpManager', contractAddress, deployer);
     const lpManager = new LPManager(contract);
-    console.log("position", await lpManager.getPosition(positionKey));
-    console.log("fees", await lpManager.getPositionFees(positionKey));
+    console.log(await lpManager.listPositionKeys(0, 1000));
 
     process.exit(0);
   } catch (error) {

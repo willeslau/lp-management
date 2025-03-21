@@ -16,6 +16,7 @@
     "lpManager::rebalance1for0": "npx hardhat run scripts/lpManager/rebalance1for0.ts --network ${NETWORK}",
     "lpManager::rebalanceClose": "npx hardhat run scripts/lpManager/rebalanceClose.ts --network ${NETWORK}",
     "lpManager::deploy": "npx hardhat run scripts/lpManager/deploy.ts --network ${NETWORK}",
+    "lpManager::listPositionKeys": "npx hardhat run scripts/lpManager/listPositionKeys.ts --network ${NETWORK}",
     "lpManager::getPositionInfo": "npx hardhat run scripts/lpManager/getPositionInfo.ts --network ${NETWORK}",
     "lpManager::checkUniswapPosition": "npx hardhat run scripts/lpManager/checkUniswapPosition.ts --network ${NETWORK}",
 

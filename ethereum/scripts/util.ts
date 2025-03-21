@@ -1,4 +1,4 @@
-import { Contract, Signer } from 'ethers';
+import { Contract, ContractRunner, Signer } from 'ethers';
 import { artifacts, ethers, network } from 'hardhat';
 
 export async function delay(ms: number): Promise<void> {
@@ -43,6 +43,11 @@ export async function deployContractWithDeployer(
 export async function loadContract(contractName: string, contractAddr: string, deployer: Signer): Promise<Contract> {
   const artifact = await artifacts.readArtifact(contractName);
   return new Contract(contractAddr, artifact.abi, deployer);
+}
+
+export async function loadContractForQuery(contractName: string, contractAddr: string, runner: ContractRunner): Promise<Contract> {
+  const artifact = await artifacts.readArtifact(contractName);
+  return new Contract(contractAddr, artifact.abi, runner);
 }
 
 export function safetyFactorFromString(rawString: string): bigint {
