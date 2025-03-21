@@ -1,6 +1,9 @@
-import { Contract, Signer, ZeroAddress } from "ethers";
-import { loadContract } from "./util";
+import { Contract, Signer, solidityPackedKeccak256, ZeroAddress } from "ethers";
+import { loadContract, loadContractForQuery } from "./util";
+import { TickLibrary } from '@uniswap/v3-sdk';
+import JSBI from "jsbi";
 
+const Q128 = 340282366920938463463374607431768211456n;
 export interface RebalanceParams {
     tokenPairId: number,
     sqrtPriceLimitX96: bigint,
@@ -285,9 +288,61 @@ export class LPManager {
         }
     }
 
+    public async getPositionFees(positionKey: string): Promise<[bigint, bigint]> {
+        const positionInfo = await this.getPosition(positionKey);
+
+        const tokenPairAddress = await this.innerContract.supportedTokenPairs();
+        const tokenPairContract = await loadContractForQuery("IUniswapV3TokenPairs", tokenPairAddress, this.innerContract.runner!);
+
+        const tokenPair = await tokenPairContract.getTokenPair(positionInfo.tokenPairId);
+
+        const uniswapContract = await loadContractForQuery('IUniswapV3Pool', tokenPair.pool, this.innerContract.runner!);
+        const slot = await uniswapContract.slot0();
+
+        const tickLower = positionInfo.tickLower;
+        const tickCurrent = slot.tick;
+        const tickUpper = positionInfo.tickUpper;
+
+        const tickLowerInfo = await uniswapContract.ticks(tickLower);
+        const tickUpperInfo = await uniswapContract.ticks(tickUpper);
+
+        const [fee0Rate, fee1Rate] = TickLibrary.getFeeGrowthInside(
+            {
+                feeGrowthOutside0X128: JSBI.BigInt(tickLowerInfo.feeGrowthOutside0X128.toString()),
+                feeGrowthOutside1X128: JSBI.BigInt(tickLowerInfo.feeGrowthOutside1X128.toString())
+            },
+            {
+                feeGrowthOutside0X128: JSBI.BigInt(tickUpperInfo.feeGrowthOutside0X128.toString()),
+                feeGrowthOutside1X128: JSBI.BigInt(tickUpperInfo.feeGrowthOutside1X128.toString())
+            },
+            Number(tickLower),
+            Number(tickUpper),
+            Number(tickCurrent),
+            JSBI.BigInt((await uniswapContract.feeGrowthGlobal0X128()).toString()),
+            JSBI.BigInt((await uniswapContract.feeGrowthGlobal1X128()).toString()),
+        );
+
+        const uniswapPositioKey = await this.getUniswapPositionKey(positionInfo.tickLower, positionInfo.tickUpper);
+        const uniswapPosition = await uniswapContract.positions(uniswapPositioKey);
+
+        const fee0 = this.calculateFee(BigInt(fee0Rate.toString()), BigInt(uniswapPosition.feeGrowthInside0LastX128), uniswapPosition.liquidity);
+        const fee1 = this.calculateFee(BigInt(fee1Rate.toString()), BigInt(uniswapPosition.feeGrowthInside1LastX128), uniswapPosition.liquidity);
+
+        return [fee0, fee1];
+    }
+
     public async withdrawRemainingFunds(tokenPairId: number): Promise<void> {
         const tx = await this.innerContract.withdraw(tokenPairId);
         await tx.wait();
+    }
+
+    calculateFee(feeGrowthInsideNow: bigint, feeGrowthInsideBefore: bigint, liquidity: bigint): bigint {
+        return (feeGrowthInsideNow - feeGrowthInsideBefore) * liquidity / Q128;
+    }
+
+    async getUniswapPositionKey(tickLower: bigint, tickUpper: bigint): Promise<string> {
+        const owner = await this.innerContract.getAddress();
+        return solidityPackedKeccak256(['address', 'int24', 'int24'], [owner, tickLower, tickUpper]);
     }
 
     async closePosition(
@@ -299,6 +354,10 @@ export class LPManager {
         const receipt = await tx.wait();
         return this.parsePositionChangedLog(receipt.logs);
     }
+}
+
+export class LPFeeQuery {
+
 }
 
 export enum PositionChange {
