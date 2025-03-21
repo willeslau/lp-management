@@ -2,7 +2,12 @@ import { ethers } from 'hardhat';
 import { loadContract } from '../util';
 import { LPManager } from '../LPManager';
 
-const contractAddress = "0xCf38bE613203B39a14D2Fb3c1A345122ec0a4351";
+// eth
+// const contractAddress = "0xCf38bE613203B39a14D2Fb3c1A345122ec0a4351";
+// const positionKey = "0x6a088a1318528dc79f2c4c0b40a2c2113679ae5bcc2deed489183fa11b5a1233";
+
+// bnb
+const contractAddress = "0x502b5D6702a4E24C4f4D8A236aFC4CFA0cE40B5E";
 const positionKey = "0x6a088a1318528dc79f2c4c0b40a2c2113679ae5bcc2deed489183fa11b5a1233";
 
 async function main() {

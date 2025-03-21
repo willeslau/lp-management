@@ -2,8 +2,11 @@ import { ethers } from 'hardhat';
 import { loadContract } from '../util';
 import { LPManager } from '../LPManager';
 
-const contractAddress = "0xCf38bE613203B39a14D2Fb3c1A345122ec0a4351";
+// eth
+// const contractAddress = "0xCf38bE613203B39a14D2Fb3c1A345122ec0a4351";
 
+// bnb
+const contractAddress = "0x502b5D6702a4E24C4f4D8A236aFC4CFA0cE40B5E";
 async function main() {
   try {
     const [deployer] = await ethers.getSigners();

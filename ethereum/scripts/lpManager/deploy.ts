@@ -1,6 +1,12 @@
 import { ethers } from 'hardhat';
 import { deployContractWithDeployer } from '../util';
 
+// eth
+// const supportedTokenPairs = "0xBD05497f929013375da90768e1253bD03762a903";
+
+// bnb
+const supportedTokenPairs = "0x3E4e0ABBd4cE2eeCA45a5ECd2F9fb3F38f1fF60F";
+
 async function main() {
   try {
     const [deployer] = await ethers.getSigners();
@@ -12,7 +18,6 @@ async function main() {
 
     const liquidityOwner = deployer.address;
     const balancer = deployer.address;
-    const supportedTokenPairs = "0xBD05497f929013375da90768e1253bD03762a903";
 
     const contract = await deployContractWithDeployer(
       deployer,

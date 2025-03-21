@@ -18,7 +18,9 @@
     "lpManager::deploy": "npx hardhat run scripts/lpManager/deploy.ts --network ${NETWORK}",
     "lpManager::listPositionKeys": "npx hardhat run scripts/lpManager/listPositionKeys.ts --network ${NETWORK}",
     "lpManager::getPositionInfo": "npx hardhat run scripts/lpManager/getPositionInfo.ts --network ${NETWORK}",
+
     "lpManager::checkUniswapPosition": "npx hardhat run scripts/lpManager/checkUniswapPosition.ts --network ${NETWORK}",
+    "lpManager::getTickSpacing": "npx hardhat run scripts/lpManager/getTickSpacing.ts --network ${NETWORK}",
 
     "supportedToken::deploy": "npx hardhat run scripts/supportedTokens/deploy.ts --network ${NETWORK}",
     "supportedToken::addTokenPair": "npx hardhat run scripts/supportedTokens/addTokenPair.ts --network ${NETWORK}",
