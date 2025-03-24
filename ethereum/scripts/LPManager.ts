@@ -1,9 +1,10 @@
-import { Contract, Signer, solidityPackedKeccak256, ZeroAddress } from "ethers";
+import { Contract, ContractRunner, Signer, solidityPackedKeccak256, ZeroAddress } from "ethers";
 import { loadContract, loadContractForQuery } from "./util";
 import { TickLibrary } from '@uniswap/v3-sdk';
 import JSBI from "jsbi";
 
 const Q128 = 340282366920938463463374607431768211456n;
+
 export interface RebalanceParams {
     tokenPairId: number,
     sqrtPriceLimitX96: bigint,
@@ -12,6 +13,7 @@ export interface RebalanceParams {
     tickUpper: bigint,
     amount0: bigint,
     amount1: bigint,
+    R_Q96: bigint,
     searchRange: SearchRange
 }
 
@@ -39,13 +41,12 @@ export interface RebalanceClosePosition {
     compoundFee: boolean
 }
 
-export interface MintParams {
-    tickLower: bigint,
-    tickUpper: bigint,
-    amount0Desired: bigint,
-    amount1Desired: bigint,
-    amount0Min: bigint,
-    amount1Min: bigint,
+export interface TokenPair {
+    id: bigint,
+    pool: string,
+    token0: string,
+    token1: string,
+    poolFee: bigint,
 }
 
 export interface LpPosition {
@@ -72,9 +73,17 @@ export interface ListPositionKeys {
 
 export class LPManager {
     innerContract: Contract;
+    uniswapUtil: Contract;
 
-    constructor(contract: Contract) {
+    constructor(contract: Contract, uniswapUtil: Contract) {
         this.innerContract = contract;
+        this.uniswapUtil = uniswapUtil;
+    }
+
+    public static async fromConfig(caller: Signer, lpManager: string, uniswapUtil: string): Promise<LPManager> {
+        const lp = await loadContract("UniswapV3LpManager", lpManager, caller);
+        const ut = await loadContract("UniswapUtil", uniswapUtil, caller);
+        return new LPManager(lp, ut);
     }
 
     private rateDeducted(amount: bigint, rate: number): bigint {
@@ -121,37 +130,25 @@ export class LPManager {
     }
 
     public async getPosition(positionKey: string): Promise<LpPosition> {
-        const pos = await this.innerContract.position(positionKey);
-        return {
-            liquidity: pos.liquidity,
-            tokenPairId: pos.tokenPairId,
-            amount0: pos.amount0,
-            amount1: pos.amount1,
-            fee0: pos.fee0,
-            fee1: pos.fee1,
-            tickLower: pos.tickLower,
-            tickUpper: pos.tickUpper,
-        }
-    }
+        const [tokenPairId, tickLower, tickUpper] = await this.innerContract.getPositionInfo(positionKey);
+        const tokenPair = await this.getTokenPair(tokenPairId);
 
-    public createMintParams(
-        tickLower: bigint,
-        tickUpper: bigint,
-        amount0Desired: bigint,
-        amount1Desired: bigint,
-        slippage: number,
-    ): MintParams {
-        if (slippage >= 1) {
-            throw Error("invalid slippage");
-        }
+        const posSummary = await this.uniswapUtil.position(
+            tokenPair.pool,
+            await this.innerContract.getAddress(),
+            tickLower,
+            tickUpper
+        );
 
         return {
+            liquidity: posSummary.liquidity,
+            tokenPairId,
+            amount0: posSummary.amount0,
+            amount1: posSummary.amount1,
+            fee0: posSummary.fee0 || 0,
+            fee1: posSummary.fee1 || 0,
             tickLower,
             tickUpper,
-            amount0Desired,
-            amount1Desired,
-            amount0Min: this.rateDeducted(amount0Desired, slippage),
-            amount1Min: this.rateDeducted(amount1Desired, slippage),
         }
     }
 
@@ -203,11 +200,21 @@ export class LPManager {
         return this.parsePositionChangedLog(receipt.logs);
     }
 
-    public async mintNewPosition(tokenPairId: number, mintParams: MintParams): Promise<PositionChanged> {
-        const tx = await this.innerContract.mint(tokenPairId, mintParams);
-        const receipt = await tx.wait();
+    public async transferIn(tokenPairId: number, isToken0: boolean, amount: bigint): Promise<void> {
+        const tokenPair = await this.getTokenPair(tokenPairId);
 
-        return this.parsePositionChangedLog(receipt.logs);
+        let token: string;
+        if (isToken0) {
+            token = tokenPair.token0;
+        } else {
+            token = tokenPair.token1;
+        }
+
+        const caller = this.innerContract.runner! as Signer;
+        const tokenContract = await loadContract("IERC20", token, caller);
+
+        const tx = await tokenContract.transfer(await this.innerContract.getAddress(), amount);
+        await tx.wait();
     }
 
     public async increaseAllowanceIfNeeded(token: string, amount: bigint): Promise<void> {
@@ -248,7 +255,7 @@ export class LPManager {
             try {
               // Attempt to parse the log using the contract's interface
               const parsedLog = this.innerContract.interface.parseLog(log)!;
-    
+
               if (parsedLog.name === "PositionChanged") {
                 positionKey = parsedLog.args[0];
                 amount0 = parsedLog.args[2];
@@ -288,13 +295,23 @@ export class LPManager {
         }
     }
 
-    public async getPositionFees(positionKey: string): Promise<[bigint, bigint]> {
-        const positionInfo = await this.getPosition(positionKey);
+    public async address(): Promise<string> {
+        return await this.innerContract.getAddress();
+    }
 
+    public runner(): ContractRunner {
+        return this.innerContract.runner!;
+    }
+
+    public async getTokenPair(tokenPairId: number): Promise<TokenPair> {
         const tokenPairAddress = await this.innerContract.supportedTokenPairs();
         const tokenPairContract = await loadContractForQuery("IUniswapV3TokenPairs", tokenPairAddress, this.innerContract.runner!);
+        return await tokenPairContract.getTokenPair(tokenPairId);
+    }
 
-        const tokenPair = await tokenPairContract.getTokenPair(positionInfo.tokenPairId);
+    public async getPositionFees(positionKey: string): Promise<[bigint, bigint]> {
+        const positionInfo = await this.getPosition(positionKey);
+        const tokenPair = await this.getTokenPair(positionInfo.tokenPairId);
 
         const uniswapContract = await loadContractForQuery('IUniswapV3Pool', tokenPair.pool, this.innerContract.runner!);
         const slot = await uniswapContract.slot0();
@@ -354,10 +371,6 @@ export class LPManager {
         const receipt = await tx.wait();
         return this.parsePositionChangedLog(receipt.logs);
     }
-}
-
-export class LPFeeQuery {
-
 }
 
 export enum PositionChange {

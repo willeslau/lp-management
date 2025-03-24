@@ -120,8 +120,9 @@ library LibPositionTracker {
         PositionTracker storage self,
         bytes32 _positionKey
     ) internal view returns (uint8, int24, int24) {
+        uint8 tokenPairId = getPositionTokenPair(self, _positionKey);
         return (
-            self.positions[_positionKey].tokenPairId,
+            tokenPairId,
             self.positions[_positionKey].tickLower,
             self.positions[_positionKey].tickUpper
         );
