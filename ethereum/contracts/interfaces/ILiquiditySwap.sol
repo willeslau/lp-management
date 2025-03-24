@@ -17,12 +17,6 @@ struct PreSwapParam {
 /// @notice The utility contract to calculate how much tokens to swap for a liquidity pool
 ///         during rebalance for uniswap V3
 interface ILiquiditySwapV3 {
-    function computeR(
-        int24 _tickCur,
-        int24 _tickLow,
-        int24 _tickHig
-    ) external pure returns (uint160 r);
-
     function encodePreSwapData(
         bool _zeroForOne,
         PreSwapParam memory _payload

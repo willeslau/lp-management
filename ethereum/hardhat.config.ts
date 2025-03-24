@@ -56,6 +56,11 @@ let config = {
       url: "https://muddy-spring-patron.quiknode.pro/ed0f9bed6f68b622580b7110b03756d08108bf3b",
       accounts: [`${PRIVATE_KEY}`],
     },
+    bnb: {
+      chainId: 56,
+      url: "https://bsc-dataseed.bnbchain.org",
+      accounts: [`${PRIVATE_KEY}`],
+    }
   },
   contractSizer: {
     alphaSort: true,

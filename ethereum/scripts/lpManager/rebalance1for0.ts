@@ -1,6 +1,7 @@
 import { ethers } from 'hardhat';
 import { loadContract } from '../util';
 import { LPManager } from '../LPManager';
+import { lpManagerFromNetwork } from './config';
 
 const contractAddress = "0x6E3aC11F344BE1B91E433Cc543231187d8E30F99";
 const tokenPairId = 1;
@@ -29,8 +30,7 @@ async function main() {
     const balance = await ethers.provider.getBalance(await deployer.getAddress());
     console.log(`Account balance: ${balance.toString()}`);
 
-    const contract = await loadContract('UniswapV3LpManager', contractAddress, deployer);
-    const lpManager = new LPManager(contract);
+    const lpManager = await lpManagerFromNetwork(deployer);
 
     await lpManager.useCaller(deployer);
 

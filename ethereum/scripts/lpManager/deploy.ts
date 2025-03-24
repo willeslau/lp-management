@@ -1,5 +1,6 @@
 import { ethers } from 'hardhat';
 import { deployContractWithDeployer } from '../util';
+import { networkConfig } from './config';
 
 async function main() {
   try {
@@ -12,17 +13,28 @@ async function main() {
 
     const liquidityOwner = deployer.address;
     const balancer = deployer.address;
-    const supportedTokenPairs = "0xBD05497f929013375da90768e1253bD03762a903";
+
+    const config = networkConfig();
+
+    if (config.uniswapUtil === undefined) {
+      const uniswapUtil = await deployContractWithDeployer(
+        deployer,
+        'UniswapUtil',
+        [],
+        false
+      );
+      console.log(`UniswapUtil deployed to ${await uniswapUtil.getAddress()}`);
+    }
 
     const contract = await deployContractWithDeployer(
       deployer,
       'UniswapV3LpManager',
-      [supportedTokenPairs, liquidityOwner, balancer],
+      [config.supportedTokenPair, liquidityOwner, balancer],
       false
     );
 
     await contract.waitForDeployment();
-    console.log(`Contract deployed to ${await contract.getAddress()}`);
+    console.log(`UniswapV3LpManager deployed to ${await contract.getAddress()}`);
 
     process.exit(0);
   } catch (error) {

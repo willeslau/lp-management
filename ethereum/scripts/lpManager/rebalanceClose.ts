@@ -1,9 +1,7 @@
 import { ethers } from 'hardhat';
-import { loadContract } from '../util';
-import { LPManager } from '../LPManager';
+import { lpManagerFromNetwork } from './config';
 
-const contractAddress = "0xA7Fc9aA1a78c2560611A968A44473c9872093b98";
-const positionKey = "0x868104b0bc6baf84a4322c1c568ba5195a82dd65a87742667731333656da8f10";
+const positionKey = "0x332ee88de5e81accb179e47bc4ee60ec66be01b4cb75b0377620655196f16404";
 
 const amount0 = ethers.parseEther("0");
 const amount1 = ethers.parseEther("0");
@@ -17,9 +15,7 @@ async function main() {
     const balance = await ethers.provider.getBalance(await deployer.getAddress());
     console.log(`Account balance: ${balance.toString()}`);
 
-    const contract = await loadContract('UniswapV3LpManager', contractAddress, deployer);
-    const lpManager = new LPManager(contract);
-
+    const lpManager = await lpManagerFromNetwork(deployer);
     await lpManager.useCaller(deployer);
 
     const params = {

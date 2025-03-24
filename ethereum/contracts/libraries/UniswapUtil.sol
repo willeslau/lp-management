@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+pragma solidity ^0.8.0;
+
+import {PositionKey} from "@uniswap/v3-periphery/contracts/libraries/PositionKey.sol";
+import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import {TickMath} from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
+import {LiquidityAmounts} from "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
+
+contract UniswapUtil {
+    function slot0(
+        address _pool
+    ) public view returns (uint160 sqrtPriceX96, int24 tick) {
+        // using low level call instead as we want to parse the data ourselves.
+        // why do we do this? Because we want to support both uniswap and pancakeswap
+        // uniswap.slot0.fee is uint8 but pancakeswap is u32
+        (bool success, bytes memory data) = _pool.staticcall(
+            abi.encodeWithSignature("slot0()")
+        );
+        require(success, "sf");
+
+        (sqrtPriceX96, tick) = abi.decode(data, (uint160, int24));
+    }
+
+    function position(
+        address _pool,
+        address _owner,
+        int24 _tickLower,
+        int24 _tickUpper
+    )
+        external
+        view
+        returns (
+            uint128 liquidity,
+            uint256 amount0,
+            uint256 amount1,
+            uint128 tokensOwed0,
+            uint128 tokensOwed1
+        )
+    {
+        bytes32 uniswapPositionKey = PositionKey.compute(
+            _owner,
+            _tickLower,
+            _tickUpper
+        );
+
+        (liquidity, , , tokensOwed0, tokensOwed1) = IUniswapV3Pool(_pool)
+            .positions(uniswapPositionKey);
+
+        (uint160 sqrtPriceX96, ) = slot0(_pool);
+
+        uint160 sqrtRatioAX96 = TickMath.getSqrtRatioAtTick(_tickLower);
+        uint160 sqrtRatioBX96 = TickMath.getSqrtRatioAtTick(_tickUpper);
+
+        (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
+            sqrtPriceX96,
+            sqrtRatioAX96,
+            sqrtRatioBX96,
+            liquidity
+        );
+    }
+}

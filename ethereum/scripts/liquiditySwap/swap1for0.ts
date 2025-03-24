@@ -1,7 +1,7 @@
 import { ethers } from 'hardhat';
 import { loadContract } from '../util';
 
-const contractAddress = "0x72624334C0B0C03eE95F53874F7C922EE7f00c4C";
+const contractAddress = "0x64605ADfd673EB59d75Ee9106BBD9F13432cfED3";
 
 // token 1 is eth, token 0 is uniswap
 const tokenIn = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";

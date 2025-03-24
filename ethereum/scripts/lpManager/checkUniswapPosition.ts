@@ -2,7 +2,7 @@ import { ethers } from 'hardhat';
 import { loadContract } from '../util';
 import { solidityPackedKeccak256 } from 'ethers';
 
-const contractAddress = "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801";
+const contractAddress = "0x90a54475d512b8f3852351611c38fad30a513491";
 const owner = "0xA7Fc9aA1a78c2560611A968A44473c9872093b98";
 const tickLower = -57720;
 const tickUpper = -54600;

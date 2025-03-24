@@ -7,7 +7,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-import {IUniswapV3SwapCallback} from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
 import {FullMath} from "@uniswap/v3-core/contracts/libraries/FullMath.sol";
 import {TickMath} from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
@@ -25,12 +24,7 @@ struct SwapCallbackData {
     bytes preSwapRawBytes;
 }
 
-contract LiquiditySwapV3 is
-    CallbackUtil,
-    ILiquiditySwapV3,
-    IUniswapV3SwapCallback,
-    Ownable
-{
+contract LiquiditySwapV3 is CallbackUtil, ILiquiditySwapV3, Ownable {
     using SafeERC20 for IERC20;
 
     error SwapOutputInvalid(
@@ -53,12 +47,11 @@ contract LiquiditySwapV3 is
     uint256 constant Q192 = 2 ** 192;
     uint256 constant CALLBACK_REVERT_LEN = 33;
 
-    /// @inheritdoc IUniswapV3SwapCallback
-    function uniswapV3SwapCallback(
+    function _swapCallback(
         int256 _amount0Delta,
         int256 _amount1Delta,
         bytes calldata _data
-    ) external override checkCallbackFrom {
+    ) internal {
         if (_amount0Delta <= 0 && _amount1Delta <= 0) {
             revert SwapAmountBothNonPositive(_amount0Delta, _amount1Delta);
         }
@@ -86,25 +79,20 @@ contract LiquiditySwapV3 is
         _invalidateCallback();
     }
 
-    function computeR(
-        int24 _tickCur,
-        int24 _tickLow,
-        int24 _tickHig
-    ) external pure returns (uint160 r) {
-        uint256 pSqrtCur = uint256(TickMath.getSqrtRatioAtTick(_tickCur));
-        uint256 pSqrtLow = uint256(TickMath.getSqrtRatioAtTick(_tickLow));
-        uint256 pSqrtHig = uint256(TickMath.getSqrtRatioAtTick(_tickHig));
+    function uniswapV3SwapCallback(
+        int256 _amount0Delta,
+        int256 _amount1Delta,
+        bytes calldata _data
+    ) external checkCallbackFrom {
+        _swapCallback(_amount0Delta, _amount1Delta, _data);
+    }
 
-        // (P_sqrt - Pa_sqrt) * (Pb_sqrt * P_sqrt / q192) / (Pb_sqrt - P_sqrt)
-        uint256 numerator1 = FullMath.mulDiv(pSqrtHig, pSqrtCur, Q192);
-        return
-            uint160(
-                FullMath.mulDiv(
-                    pSqrtCur - pSqrtLow,
-                    numerator1,
-                    pSqrtHig - pSqrtCur
-                )
-            );
+    function pancakeV3SwapCallback(
+        int256 _amount0Delta,
+        int256 _amount1Delta,
+        bytes calldata _data
+    ) external checkCallbackFrom {
+        _swapCallback(_amount0Delta, _amount1Delta, _data);
     }
 
     function encodePreSwapData(

@@ -1,8 +1,6 @@
 import { ethers } from 'hardhat';
 import { lpManagerFromNetwork } from './config';
 
-const positionKey = "0x69b84af7bb696ed03d49496a29034f8968e450bc82f0974a0c52ce18bf8b7f29";
-
 async function main() {
   try {
     const [deployer] = await ethers.getSigners();
@@ -13,8 +11,7 @@ async function main() {
     console.log(`Account balance: ${balance.toString()}`);
 
     const lpManager = await lpManagerFromNetwork(deployer);
-    // console.log("position", await lpManager.getPosition(positionKey));
-    console.log("fees", await lpManager.getPositionFees(positionKey));
+    await lpManager.withdrawRemainingFunds(1);
 
     process.exit(0);
   } catch (error) {
