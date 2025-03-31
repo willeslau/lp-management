@@ -9,11 +9,19 @@ import { loadContract } from '../util';
 // const fee = "3000";
 
 // bnb
-const contractAddress = "0x3E4e0ABBd4cE2eeCA45a5ECd2F9fb3F38f1fF60F";
-const token0 = "0x5c85d6c6825ab4032337f11ee92a72df936b46f6";
+const contractAddress = "0x2A04015868BBC227d996AC1CFd1fe96dBCD80257";
+
+// // id = 0
+// const token0 = "0x6e167d7ee67d9518749e25be53c82b7ad01952ad";
+// const token1 = "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c";
+// const poolAddress = "0xad27f113d7faa5fbd99a8c384832b1d458d23034";
+// const fee = "2500";
+
+// id = 1
+const token0 = "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d";
 const token1 = "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c";
-const poolAddress = "0x90a54475d512b8f3852351611c38fad30a513491";
-const fee = "2500";
+const poolAddress = "0xf2688Fb5B81049DFB7703aDa5e770543770612C4";
+const fee = "100";
 
 async function main() {
   try {

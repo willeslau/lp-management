@@ -174,13 +174,17 @@ async function setupInitialPosition(
 ): Promise<InitialPositionResult> {
   await lpManager.useCaller(liquidityOwner);
 
-  await lpManager.transferIn(rebalanceParams.tokenPairId, true, rebalanceParams.amount0);
-  await lpManager.transferIn(rebalanceParams.tokenPairId, false, rebalanceParams.amount1);
+  const preReserves = await lpManager.getReserves(rebalanceParams.tokenPairId);
+  await lpManager.injectPricinple(rebalanceParams.tokenPairId, rebalanceParams.amount0, rebalanceParams.amount1);
+  const posReserves = await lpManager.getReserves(rebalanceParams.tokenPairId);
+
+  expect(posReserves[0]).to.be.eq(rebalanceParams.amount0 + preReserves[0]);
+  expect(posReserves[1]).to.be.eq(rebalanceParams.amount1 + preReserves[1]);
 
   await lpManager.useCaller(balancer);
-  
+
   const positionChange = await lpManager.rebalance1For0(rebalanceParams);
-  
+
   expect(positionChange.change).to.eq(PositionChange.Create);
 
   const position = await lpManager.getPosition(positionChange.positionKey);
@@ -336,6 +340,7 @@ describe("UniswapV3LpManager", () => {
       params
     );
 
+    await checkEndReserve(lpManager, tokenPairId);
     expect(positionChange.change).to.eq(PositionChange.Increase);
 
     const newPosition = await lpManager.getPosition(
@@ -392,6 +397,8 @@ describe("UniswapV3LpManager", () => {
       initialPosition.positionKey,
       params
     );
+
+    await checkEndReserve(lpManager, tokenPairId);
 
     expect(positionChange.change).to.eq(PositionChange.Descrese);
 
@@ -460,6 +467,7 @@ describe("UniswapV3LpManager", () => {
       params
     );
 
+    await checkEndReserve(lpManager, tokenPairId);
     expect(positionChange.change).to.eq(PositionChange.Closed);
 
     await expect(
@@ -485,9 +493,10 @@ describe("UniswapV3LpManager", () => {
 
     // sending 0.01 token1 to the contract to simulate rebalance close is already called
     const amount = ethers.parseEther("0.01"); // Increased test amount
-    const token1 = await loadContract("IERC20", uniswap.token1, liquidityOwner);
 
-    await token1.transfer(await lpManager.innerContract.getAddress(), amount);
+    await lpManager.useCaller(liquidityOwner);
+    await lpManager.injectPricinple(tokenPairId, ethers.parseEther('0'), amount);
+    await lpManager.useCaller(balancer);
 
     // now, off chain calculation based on current liquidity and price sqrt
     const rebalanceParams = {
@@ -513,6 +522,7 @@ describe("UniswapV3LpManager", () => {
 
     const positionChange = await lpManager.rebalance1For0(rebalanceParams);
 
+    await checkEndReserve(lpManager, tokenPairId);
     expect(positionChange.change).to.eq(PositionChange.Create);
 
     withinPercentageDiff(positionChange.amount0, expectedPosition0, 0.012);
@@ -523,12 +533,13 @@ describe("UniswapV3LpManager", () => {
   });
 
   it("rebalance 1 for 0 - should increase liquidity when position exists", async () => {
-    const { lpManager, uniswap, balancer, liquidityOwner } = testSetup;
+    const { lpManager, balancer, liquidityOwner } = testSetup;
     const amount = ethers.parseEther("0.01");
-    const token1 = await loadContract("IERC20", uniswap.token1, liquidityOwner);
 
-    // Create initial position with rebalance
-    await token1.transfer(await lpManager.innerContract.getAddress(), amount);
+    await lpManager.useCaller(liquidityOwner);
+    await lpManager.injectPricinple(tokenPairId, ethers.parseEther('0'), amount);
+    await lpManager.useCaller(balancer);
+
     const rebalanceParams = {
       tokenPairId,
       sqrtPriceLimitX96: 4880412434988856429110099968n,
@@ -547,12 +558,17 @@ describe("UniswapV3LpManager", () => {
 
     await lpManager.useCaller(balancer);
     const initialPositionChange = await lpManager.rebalance1For0(rebalanceParams);
+    await checkEndReserve(lpManager, tokenPairId);
     const initialPosition = await lpManager.getPosition(initialPositionChange.positionKey);
     const initialLiquidity = initialPosition.liquidity;
 
     // Rebalance again with same tick range to trigger increaseLiquidity
-    await token1.transfer(await lpManager.innerContract.getAddress(), amount);
+    await lpManager.useCaller(liquidityOwner);
+    await lpManager.injectPricinple(tokenPairId, ethers.parseEther('0'), amount);
+    await lpManager.useCaller(balancer);
+
     const positionChange = await lpManager.rebalance1For0(rebalanceParams);
+    await checkEndReserve(lpManager, tokenPairId);
 
     expect(positionChange.change).to.eq(PositionChange.Increase);
     expect(positionChange.positionKey).to.eq(initialPositionChange.positionKey);
@@ -564,10 +580,11 @@ describe("UniswapV3LpManager", () => {
   it("rebalance 0 for 1 - should increase liquidity when position exists", async () => {
     const { lpManager, uniswap, balancer, liquidityOwner } = testSetup;
     const amount = ethers.parseEther("1");
-    const token0 = await loadContract("IERC20", uniswap.token0, liquidityOwner);
 
-    // Create initial position with rebalance
-    await token0.transfer(await lpManager.innerContract.getAddress(), amount);
+    await lpManager.useCaller(liquidityOwner);
+    await lpManager.injectPricinple(tokenPairId, amount, ethers.parseEther("0"));
+    await lpManager.useCaller(balancer);
+
     const rebalanceParams = {
       tokenPairId,
       sqrtPriceLimitX96: 4303636419944718166428483584n,
@@ -584,14 +601,18 @@ describe("UniswapV3LpManager", () => {
       },
     };
 
+    await lpManager.useCaller(liquidityOwner);
+    await lpManager.injectPricinple(tokenPairId, amount, ethers.parseEther("0"));
+
     await lpManager.useCaller(balancer);
     const initialPositionChange = await lpManager.rebalance0For1(rebalanceParams);
+    await checkEndReserve(lpManager, tokenPairId);
+
     const initialPosition = await lpManager.getPosition(initialPositionChange.positionKey);
     const initialLiquidity = initialPosition.liquidity;
 
-    // Rebalance again with same tick range to trigger increaseLiquidity
-    await token0.transfer(await lpManager.innerContract.getAddress(), amount);
     const positionChange = await lpManager.rebalance0For1(rebalanceParams);
+    await checkEndReserve(lpManager, tokenPairId);
 
     expect(positionChange.change).to.eq(PositionChange.Increase);
     expect(positionChange.positionKey).to.eq(initialPositionChange.positionKey);
@@ -604,9 +625,10 @@ describe("UniswapV3LpManager", () => {
     const { lpManager, uniswap, balancer, liquidityOwner } = testSetup;
     // sending 0.01 token1 to the contract to simulate rebalance close is already called
     const amount = ethers.parseEther("0.01"); // Increased test amount
-    const token1 = await loadContract("IERC20", uniswap.token1, liquidityOwner);
 
-    await token1.transfer(await lpManager.innerContract.getAddress(), amount);
+    await lpManager.useCaller(liquidityOwner);
+    await lpManager.injectPricinple(tokenPairId, ethers.parseEther('0'), amount);
+    await lpManager.useCaller(balancer);
 
     // now, off chain calculation based on current liquidity and price sqrt
     const rebalanceParams = {
@@ -629,6 +651,7 @@ describe("UniswapV3LpManager", () => {
     await lpManager.useCaller(balancer);
 
     let positionChange = await lpManager.rebalance1For0(rebalanceParams);
+    await checkEndReserve(lpManager, tokenPairId);
 
     // increase liquidity
     let amount0 = ethers.parseEther("33");
@@ -649,6 +672,7 @@ describe("UniswapV3LpManager", () => {
       params
     );
     expect(positionChange.change).to.be.eq(PositionChange.Increase);
+    await checkEndReserve(lpManager, tokenPairId);
 
     // decrease liquidity
     amount0 = ethers.parseEther("15");
@@ -667,20 +691,22 @@ describe("UniswapV3LpManager", () => {
       decreaseParams
     );
     expect(positionChange.change).to.be.eq(PositionChange.Descrese);
+    await checkEndReserve(lpManager, tokenPairId);
 
     // close postion
     positionChange = await lpManager.closePosition(positionChange.positionKey);
     expect(positionChange.change).to.be.eq(PositionChange.Closed);
+    await checkEndReserve(lpManager, tokenPairId);
   });
 
   it("rebalance 0 for 1 - new position created", async () => {
     const { lpManager, uniswap, balancer, liquidityOwner } = testSetup;
     // sending 1 token1 to the contract to simulate rebalance close is already called
     const amount = ethers.parseEther("1");
-    const token0 = await loadContract("IERC20", uniswap.token0, liquidityOwner);
+    await lpManager.useCaller(liquidityOwner);
+    await lpManager.injectPricinple(tokenPairId, amount, ethers.parseEther("0"));
 
-    await token0.transfer(await lpManager.innerContract.getAddress(), amount);
-
+    await lpManager.useCaller(balancer);
     // now, off chain calculation based on current liquidity and price sqrt
     const rebalanceParams = {
       tokenPairId,
@@ -705,6 +731,8 @@ describe("UniswapV3LpManager", () => {
 
     const positionChange = await lpManager.rebalance0For1(rebalanceParams);
 
+    await checkEndReserve(lpManager, tokenPairId);
+
     expect(positionChange.change).to.eq(PositionChange.Create);    
     withinPercentageDiff(positionChange.amount0, expectedPosition0, 0.01);
     withinPercentageDiff(positionChange.amount1, expectedPosition1, 0.01);
@@ -719,8 +747,10 @@ describe("UniswapV3LpManager", () => {
     const amount = ethers.parseEther("1");
     const token0 = await loadContract("IERC20", uniswap.token0, liquidityOwner);
 
-    await token0.transfer(await lpManager.innerContract.getAddress(), amount);
+    await lpManager.useCaller(liquidityOwner);
+    await lpManager.injectPricinple(tokenPairId, amount, ethers.parseEther("0"));
 
+    await lpManager.useCaller(balancer);
     // now, off chain calculation based on current liquidity and price sqrt
     const rebalanceParams = {
       tokenPairId,
@@ -741,6 +771,7 @@ describe("UniswapV3LpManager", () => {
 
     await lpManager.useCaller(balancer);
     let positionChange = await lpManager.rebalance0For1(rebalanceParams);
+    await checkEndReserve(lpManager, tokenPairId);
 
     // increase liquidity
     let amount0 = ethers.parseEther("33");
@@ -761,6 +792,7 @@ describe("UniswapV3LpManager", () => {
       params
     );
     expect(positionChange.change).to.be.eq(PositionChange.Increase);
+    await checkEndReserve(lpManager, tokenPairId);
 
     // decrease liquidity
     amount0 = ethers.parseEther("15");
@@ -779,10 +811,12 @@ describe("UniswapV3LpManager", () => {
       decreaseParams
     );
     expect(positionChange.change).to.be.eq(PositionChange.Descrese);
+    await checkEndReserve(lpManager, tokenPairId);
 
     // close postion
     positionChange = await lpManager.closePosition(positionChange.positionKey);
     expect(positionChange.change).to.be.eq(PositionChange.Closed);
+    await checkEndReserve(lpManager, tokenPairId);
   });
 });
 
@@ -880,6 +914,7 @@ describe("UniswapV3LpManager - More Cases", () => {
 
     lpManager.useCaller(user);
     await expect(lpManager.rebalance1For0(rebalanceParams)).to.be.reverted;
+    await checkEndReserve(lpManager, tokenPairId);
   });
 
   it("should revert when trying to decrease liquidity below minimum", async () => {
@@ -906,6 +941,7 @@ describe("UniswapV3LpManager - More Cases", () => {
       lpManager.innerContract,
       "PriceSlippageCheck"
     );
+    await checkEndReserve(lpManager, result.tokenPair);
   });
 
   it("should completely remove position after closePosition", async () => {
@@ -919,6 +955,8 @@ describe("UniswapV3LpManager - More Cases", () => {
 
     lpManager.useCaller(liquidityOwner);
     await lpManager.closePosition(initialPosition.positionKey);
+
+    await checkEndReserve(lpManager, initialPosition.tokenPair);
 
     // Verify position is completely removed
     await expect(
@@ -941,6 +979,7 @@ describe("UniswapV3LpManager - More Cases", () => {
 
     lpManager.useCaller(liquidityOwner);
     await lpManager.closePosition(initialPosition.positionKey);
+    await checkEndReserve(lpManager, initialPosition.tokenPair);
 
     const result = await setupInitialPosition(
       lpManager,
@@ -954,6 +993,8 @@ describe("UniswapV3LpManager - More Cases", () => {
     const position = await lpManager.getPosition(result.positionKey);
     expect(position.tickLower).to.eq(initialPosition.tickLower);
     expect(position.tickUpper).to.eq(initialPosition.tickUpper);
+
+    await checkEndReserve(lpManager, initialPosition.tokenPair);
   });
 
   it("should support liquidity operations on minted position", async () => {
@@ -1000,6 +1041,7 @@ describe("UniswapV3LpManager - More Cases", () => {
       decreaseParams
     );
     expect(decreaseResult.change).to.eq(PositionChange.Descrese);
+    await checkEndReserve(lpManager, initialPosition.tokenPair);
 
     // Verify liquidity decreased
     const positionAfterDecrease = await lpManager.getPosition(initialPosition.positionKey);
@@ -1061,6 +1103,8 @@ describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
 
     lpManager.useCaller(balancer);
     await expect(lpManager.rebalance1For0(rebalanceParams)).to.be.reverted;
+
+    await checkEndReserve(lpManager, initialPosition.tokenPair);
   });
 
   it("should handle rebalance close position without compounding fees", async () => {
@@ -1080,6 +1124,8 @@ describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
     };
     await lpManager.rebalanceClosePosition(initialPosition.positionKey, params);
 
+    await checkEndReserve(lpManager, initialPosition.tokenPair);
+
     const token0AfterBalance = await token0.balanceOf(liquidityOwnerAddress);
     const token1AfterBalance = await token1.balanceOf(liquidityOwnerAddress);
     expect(token0AfterBalance).to.be.gte(token0InitialBalance);
@@ -1087,21 +1133,18 @@ describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
   });
 
   it("should emit RemainingFundsWithdraw event when withdrawing remaining funds", async () => {
-    const { lpManager, uniswap, liquidityOwner } = testSetup;
-    const token0 = await ethers.getContractAt("MockERC20", uniswap.token0);
-    const token1 = await ethers.getContractAt("MockERC20", uniswap.token1);
+    const { lpManager, liquidityOwner } = testSetup;
     const amount0 = ethers.parseEther("1");
     const amount1 = ethers.parseEther("0.5");
 
-    // Mint and transfer tokens to the contract
-    await token0.transfer(await lpManager.innerContract.getAddress(), amount0);
-    await token1.transfer(await lpManager.innerContract.getAddress(), amount1);
-    
-    // Withdraw remaining funds
     await lpManager.useCaller(liquidityOwner);
-    expect(await lpManager.withdrawRemainingFunds(1))
+    await lpManager.injectPricinple(initialPosition.tokenPair, amount0, amount1);
+
+    expect(await lpManager.withdrawRemainingFunds(initialPosition.tokenPair))
       .to.emit(lpManager.innerContract, "RemainingFundsWithdrawn")
       .withArgs(await liquidityOwner.getAddress(), amount0, amount1);
+
+    await checkEndReserve(lpManager, initialPosition.tokenPair);
   });
 
   it("should batch collect fees successfully for a valid position", async () => {
@@ -1122,6 +1165,7 @@ describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
         initialPosition.positionKey,
       ])
     ).to.emit(lpManager.innerContract, "FeesCollected");
+    await checkEndReserve(lpManager, initialPosition.tokenPair);
 
     // Verify balances after fee collection
     const token0AfterBalance = await token0.balanceOf(liquidityOwnerAddress);
@@ -1144,6 +1188,8 @@ describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
       lpManager.innerContract,
       "InvalidPositionKey"
     );
+
+    await checkEndReserve(lpManager, initialPosition.tokenPair);
   });
 
   it("should handle empty position keys array", async () => {
@@ -1152,6 +1198,7 @@ describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
 
     await expect(lpManager.innerContract.batchCollectFees([])).to.not.be
       .reverted;
+    await checkEndReserve(lpManager, initialPosition.tokenPair);
   });
 
   it("should revert when non-liquidity owner calls batchCollectFees", async () => {
@@ -1164,6 +1211,8 @@ describe("UniswapV3LpManager - Fee Collection and Rebalancing", () => {
       lpManager.innerContract,
       "NotLiquidityOwner"
     );
+
+    await checkEndReserve(lpManager, initialPosition.tokenPair);
   });
 });
 
@@ -1230,6 +1279,8 @@ describe("UniswapV3LpManager - Position Operations", () => {
     const token1AfterBalance = await token1.balanceOf(liquidityOwnerAddress);
     expect(token0AfterBalance).to.eq(token0InitialBalance + result.amount0);
     expect(token1AfterBalance).to.eq(token1InitialBalance + result.amount1);
+
+    await checkEndReserve(lpManager, initialPosition.tokenPair);
   });
 
   it("should close position successfully with minimum amounts", async () => {
@@ -1372,7 +1423,7 @@ describe("UniswapV3LpManager - Rebalance Operations", () => {
   });
 
   it("rebalance1For0 should call _rebalanceIncreaseLiquidity when within tick range", async () => {
-    const { lpManager, uniswap, balancer, liquidityOwner } = testSetup;
+    const { lpManager, balancer, liquidityOwner } = testSetup;
 
     // Get initial position
     const position = await lpManager.getPosition(initialPosition.positionKey);
@@ -1380,11 +1431,11 @@ describe("UniswapV3LpManager - Rebalance Operations", () => {
 
     // Use same amount and params from successful test case
     const amount = ethers.parseEther("0.01");
-    const token1 = await loadContract("IERC20", uniswap.token1, liquidityOwner);
 
-    // Transfer tokens to contract
-    await token1.transfer(await lpManager.innerContract.getAddress(), amount);
+    await lpManager.useCaller(liquidityOwner);
+    await lpManager.injectPricinple(position.tokenPairId, ethers.parseEther("0"), amount);
 
+    await lpManager.useCaller(balancer);
     // Use exact same parameters that worked in "rebalance 1 for 0 - new position created" test
     const rebalanceParams = {
       tokenPairId: position.tokenPairId,
@@ -1405,7 +1456,6 @@ describe("UniswapV3LpManager - Rebalance Operations", () => {
     // Execute rebalance
     await lpManager.useCaller(balancer);
     const result = await lpManager.rebalance1For0(rebalanceParams);
-
     expect(result).to.emit(lpManager.innerContract, "PositionChanged");
 
     // Verify results
@@ -1416,6 +1466,8 @@ describe("UniswapV3LpManager - Rebalance Operations", () => {
       initialPosition.positionKey
     );
     expect(newPosition.liquidity).to.be.gt(initialLiquidity);
+
+    await checkEndReserve(lpManager, position.tokenPairId);
   });
 
   it("rebalance0For1 should call _rebalanceIncreaseLiquidity when within tick range", async () => {
@@ -1427,11 +1479,12 @@ describe("UniswapV3LpManager - Rebalance Operations", () => {
 
     // Use same amount and params from successful test case
     const amount = ethers.parseEther("1");
-    const token0 = await loadContract("IERC20", uniswap.token0, liquidityOwner);
 
-    // Transfer tokens to contract
-    await token0.transfer(await lpManager.innerContract.getAddress(), amount);
+    await lpManager.useCaller(liquidityOwner);
+    await lpManager.injectPricinple(position.tokenPairId, amount, ethers.parseEther("0"));
 
+    await lpManager.useCaller(balancer);
+    
     // Use exact same parameters that worked in "rebalance 0 for 1 - new position created" test
     const rebalanceParams = {
       tokenPairId: position.tokenPairId,
@@ -1463,5 +1516,23 @@ describe("UniswapV3LpManager - Rebalance Operations", () => {
       initialPosition.positionKey
     );
     expect(newPosition.liquidity).to.be.gt(initialLiquidity);
+
+    await checkEndReserve(lpManager, position.tokenPairId);
   });
 });
+
+/// This works only for a single pool deposit
+async function checkEndReserve(lpManager: LPManager, tokenPairId: number): Promise<void> {
+  const tokenPair = await lpManager.getTokenPair(tokenPairId);
+
+  const token0 = await loadContract("IERC20", tokenPair.token0, lpManager.runner() as Signer);
+  const token1 = await loadContract("IERC20", tokenPair.token1, lpManager.runner() as Signer);
+
+  const token0Balance = await token0.balanceOf(await lpManager.innerContract.getAddress());
+  const token1Balance = await token1.balanceOf(await lpManager.innerContract.getAddress());
+
+  const reserves = await lpManager.getReserves(tokenPairId);
+
+  expect(token0Balance).to.be.eq(reserves[0]);
+  expect(token1Balance).to.be.eq(reserves[1]);
+}
