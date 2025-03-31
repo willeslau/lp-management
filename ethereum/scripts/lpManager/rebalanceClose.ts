@@ -1,7 +1,7 @@
 import { ethers } from 'hardhat';
 import { lpManagerFromNetwork } from './config';
 
-const positionKey = "0x332ee88de5e81accb179e47bc4ee60ec66be01b4cb75b0377620655196f16404";
+const positionKey = "0xe79a875d324957a5b2d64a4894094456536a579f3b8ec92c6e5beeac7a154739";
 
 const amount0 = ethers.parseEther("0");
 const amount1 = ethers.parseEther("0");
@@ -21,7 +21,7 @@ async function main() {
     const params = {
         amount0Min: amount0,
         amount1Min: amount1,
-        compoundFee: false
+        compoundFee: true
     };
 
     const positionChange = await lpManager.rebalanceClosePosition(positionKey, params);

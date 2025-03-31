@@ -1,7 +1,7 @@
 import { ethers } from 'hardhat';
 import { loadContract } from '../util';
 
-const contractAddress = "0x90a54475d512b8f3852351611c38fad30a513491";
+const contractAddress = "0xaD27F113D7FaA5fBD99a8c384832B1D458D23034";
 
 async function main() {
   try {

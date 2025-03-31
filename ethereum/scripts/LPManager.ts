@@ -49,6 +49,11 @@ export interface TokenPair {
     poolFee: bigint,
 }
 
+export interface TokenAmounts {
+    amount0: bigint,
+    amount1: bigint
+}
+
 export interface LpPosition {
     tokenPairId: number,
     tickLower: bigint,
@@ -88,6 +93,20 @@ export class LPManager {
 
     private rateDeducted(amount: bigint, rate: number): bigint {
         return amount * BigInt(Math.floor(10000000 * (1 - rate))) / BigInt(10000000);
+    }
+
+    public async injectPricinple(tokenPairId: number, amount0: bigint, amount1: bigint): Promise<void> {
+        const tokenPair = await this.getTokenPair(tokenPairId);
+        await this.increaseAllowanceIfNeeded(tokenPair.token0, amount0);
+        await this.increaseAllowanceIfNeeded(tokenPair.token1, amount1);
+      
+        await this.innerContract.injectPricinple(tokenPairId, amount0, amount1);
+        return;
+    }
+
+    public async getReserves(tokenPairId: number): Promise<[bigint, bigint]> {
+        const amounts = await this.innerContract.getReserveAmounts(tokenPairId);
+        return [amounts[0], amounts[1]];
     }
 
     public useCaller(caller: Signer) {
@@ -131,6 +150,7 @@ export class LPManager {
 
     public async getPosition(positionKey: string): Promise<LpPosition> {
         const [tokenPairId, tickLower, tickUpper] = await this.innerContract.getPositionInfo(positionKey);
+
         const tokenPair = await this.getTokenPair(tokenPairId);
 
         const posSummary = await this.uniswapUtil.position(
@@ -307,6 +327,21 @@ export class LPManager {
         const tokenPairAddress = await this.innerContract.supportedTokenPairs();
         const tokenPairContract = await loadContractForQuery("IUniswapV3TokenPairs", tokenPairAddress, this.innerContract.runner!);
         return await tokenPairContract.getTokenPair(tokenPairId);
+    }
+
+    public async getReservesWithEarnings(tokenPairId: number): Promise<{ fee: TokenAmounts, reserves: TokenAmounts}> {
+        const fees = await this.innerContract.getFeesEarned(tokenPairId);
+        const reserves = await this.innerContract.getReserveAmounts(tokenPairId);
+        return {
+            fee: {
+                amount0: fees[0],
+                amount1: fees[1],
+            },
+            reserves: {
+                amount0: reserves[0],
+                amount1: reserves[1]
+            }
+        }
     }
 
     public async getPositionFees(positionKey: string): Promise<[bigint, bigint]> {
