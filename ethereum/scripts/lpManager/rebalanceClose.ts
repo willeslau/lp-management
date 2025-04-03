@@ -1,7 +1,7 @@
 import { ethers } from 'hardhat';
 import { lpManagerFromNetwork } from './config';
 
-const positionKey = "0xe79a875d324957a5b2d64a4894094456536a579f3b8ec92c6e5beeac7a154739";
+const positionKey = "0xc100f0b2d9deaf4eed46d0e494219e964a45f108e6fe623582990f43641089c8";
 
 const amount0 = ethers.parseEther("0");
 const amount1 = ethers.parseEther("0");

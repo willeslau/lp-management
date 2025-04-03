@@ -539,9 +539,15 @@ contract UniswapV3LpManager is Ownable, UniswapV3PoolsProxy {
         );
     }
 
+    function forceWithdraw(uint8 _tokenPairId) external onlyLiquidityOwner onlyDeactivated {
+        TokenPair memory tokenPair = _ensureValidTokenPair(_tokenPairId);
+        _withdraw(tokenPair);
+    }
+
     function withdraw(uint8 _tokenPairId) external onlyLiquidityOwner {
         TokenPair memory tokenPair = _ensureValidTokenPair(_tokenPairId);
         _withdraw(tokenPair);
+
         reserves.setAmounts(_tokenPairId, 0, 0);
     }
 

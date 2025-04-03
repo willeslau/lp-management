@@ -939,7 +939,7 @@ describe("UniswapV3LpManager - More Cases", () => {
       lpManager.decreaseLiquidity(result.positionKey, decreaseParams)
     ).to.be.revertedWithCustomError(
       lpManager.innerContract,
-      "PriceSlippageCheck"
+      "BurnSlippageError"
     );
     await checkEndReserve(lpManager, result.tokenPair);
   });
@@ -1339,7 +1339,7 @@ describe("UniswapV3LpManager - Position Operations", () => {
       )
     ).to.be.revertedWithCustomError(
       lpManager.innerContract,
-      "PriceSlippageCheck"
+      "BurnSlippageError"
     );
   });
 

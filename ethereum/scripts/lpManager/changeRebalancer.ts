@@ -1,6 +1,8 @@
 import { ethers } from 'hardhat';
 import { lpManagerFromNetwork } from './config';
 
+const newRebalancer = "0x4FDA8F3BB6b42C8Acbd93728E9eb9C5099f1c47b";
+
 async function main() {
   try {
     const [deployer] = await ethers.getSigners();
@@ -11,7 +13,9 @@ async function main() {
     console.log(`Account balance: ${balance.toString()}`);
 
     const lpManager = await lpManagerFromNetwork(deployer);
-    await lpManager.withdrawRemainingFunds(4);
+    await lpManager.useCaller(deployer);
+    
+    await lpManager.innerContract.setBalancer(newRebalancer);
 
     process.exit(0);
   } catch (error) {

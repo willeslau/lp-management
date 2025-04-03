@@ -1,7 +1,9 @@
 import { ethers } from 'hardhat';
-import { loadContract } from '../util';
-import { LPManager } from '../LPManager';
 import { lpManagerFromNetwork } from './config';
+
+function toWei(amount: bigint, decimals: number): Number {
+  return Number(amount) / Math.pow(10, Number(decimals));
+}
 
 async function main() {
   try {
@@ -13,7 +15,37 @@ async function main() {
     console.log(`Account balance: ${balance.toString()}`);
 
     const lpManager = await lpManagerFromNetwork(deployer);
-    console.log(await lpManager.listPositionKeys(0, 1000));
+    const positions = await lpManager.listPositionKeys(0, 100);
+    for (const positionKey of positions.positionKeys) {
+      const position = await lpManager.getPosition(positionKey);
+
+      const feeToCollect = await lpManager.getPositionFees(positionKey);
+      const reservesWithEarnings = await lpManager.getReservesWithEarnings(position.tokenPairId);
+  
+      const decimals = await lpManager.decimals(position.tokenPairId);
+      const names = await lpManager.names(position.tokenPairId);
+  
+      const totalAmount0 = feeToCollect[0] + position.amount0 + reservesWithEarnings.reserves.amount0;
+      const totalAmount1 = feeToCollect[1] + position.amount1 + reservesWithEarnings.reserves.amount1;
+  
+      console.log("position summary:", positionKey);
+      console.log(`  ${names[0]} amount:`, toWei(position.amount0, decimals[0]));
+      console.log(`  ${names[1]} amount:`, toWei(position.amount1, decimals[1]));
+      console.log(`  ${names[0]} reserve:`, toWei(reservesWithEarnings.reserves.amount0, decimals[0]));
+      console.log(`  ${names[1]} reserve:`, toWei(reservesWithEarnings.reserves.amount1, decimals[1]));
+      // console.log("  amount in token 1: ", );
+      console.log(`  ${names[0]} fee: `, toWei(feeToCollect[0], decimals[0]));
+      console.log(`  ${names[1]} fee: `, toWei(feeToCollect[1], decimals[1]));
+      // console.log("  fee in token 1: ", );
+      console.log("  ===== CURRENT TOTAL HOLDING ===== ")
+      console.log(`  ${names[0]} total: `, toWei(totalAmount0, decimals[0]));
+      console.log(`  ${names[1]} total: `, toWei(totalAmount1, decimals[1]));
+      console.log("  ===== TOTAL HISTORICAL =====")
+      console.log(`  ${names[0]} total: `, toWei(totalAmount0 + reservesWithEarnings.fee.amount0, decimals[0]));
+      console.log(`  ${names[1]} total: `, toWei(totalAmount1 + reservesWithEarnings.fee.amount1, decimals[1]));
+
+      console.log("\n");
+    }
 
     process.exit(0);
   } catch (error) {

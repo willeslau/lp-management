@@ -237,6 +237,26 @@ export class LPManager {
         await tx.wait();
     }
 
+    public async decimals(tokenPairId: number): Promise<number[]> {
+        const tokenPair = await this.getTokenPair(tokenPairId);
+
+        const caller = this.innerContract.runner! as Signer;
+        const token0 = await loadContract("ERC20", tokenPair.token0, caller);
+        const token1 = await loadContract("ERC20", tokenPair.token1, caller);
+        
+        return [await token0.decimals(), await token1.decimals()];
+    }
+
+    public async names(tokenPairId: number): Promise<string[]> {
+        const tokenPair = await this.getTokenPair(tokenPairId);
+
+        const caller = this.innerContract.runner! as Signer;
+        const token0 = await loadContract("ERC20", tokenPair.token0, caller);
+        const token1 = await loadContract("ERC20", tokenPair.token1, caller);
+        
+        return [await token0.name(), await token1.name()];
+    }
+
     public async increaseAllowanceIfNeeded(token: string, amount: bigint): Promise<void> {
         const caller = this.innerContract.runner! as Signer;
         const spender = await this.innerContract.getAddress();

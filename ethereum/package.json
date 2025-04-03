@@ -20,12 +20,18 @@
     "lpManager::withdrawAll": "npx hardhat run scripts/lpManager/withdrawAll.ts --network ${NETWORK}",
     "lpManager::getPositionInfo": "npx hardhat run scripts/lpManager/getPositionInfo.ts --network ${NETWORK}",
     "lpManager::mintFromRebalance": "npx hardhat run scripts/lpManager/mintFromRebalance.ts --network ${NETWORK}",
+    "lpManager::injectPrinciple": "npx hardhat run scripts/lpManager/injectPrinciple.ts --network ${NETWORK}",
+    "lpManager::changeRebalancer": "npx hardhat run scripts/lpManager/changeRebalancer.ts --network ${NETWORK}",
+    "lpManager::getReserves": "npx hardhat run scripts/lpManager/getReserves.ts --network ${NETWORK}",
+    "lpManager::closePosition": "npx hardhat run scripts/lpManager/closePosition.ts --network ${NETWORK}",
 
     "lpManager::checkUniswapPosition": "npx hardhat run scripts/lpManager/checkUniswapPosition.ts --network ${NETWORK}",
     "lpManager::getTickSpacing": "npx hardhat run scripts/lpManager/getTickSpacing.ts --network ${NETWORK}",
 
     "supportedToken::deploy": "npx hardhat run scripts/supportedTokens/deploy.ts --network ${NETWORK}",
     "supportedToken::addTokenPair": "npx hardhat run scripts/supportedTokens/addTokenPair.ts --network ${NETWORK}",
+    "supportedToken::getAllTokenPairs": "npx hardhat run scripts/supportedTokens/getAllTokenPairs.ts --network ${NETWORK}",
+
     "lpSwap::swap1for0Debug": "npx hardhat run scripts/liquiditySwap/swap1for0Debug.ts --network ${NETWORK}",
     "lpSwap::swap1for0": "npx hardhat run scripts/liquiditySwap/swap1for0.ts --network ${NETWORK}",
     "lpSwap::deploy": "npx hardhat run scripts/liquiditySwap/deploy.ts --network ${NETWORK}"
