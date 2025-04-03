@@ -16,7 +16,7 @@ async function main() {
       [owner, tickLower, tickUpper]
     );
     console.log(uniswapKey);
-    
+
     const contract = await loadContract('IUniswapV3Pool', contractAddress, deployer);
     console.log(await contract.positions(uniswapKey));
     console.log(await contract.slot0());

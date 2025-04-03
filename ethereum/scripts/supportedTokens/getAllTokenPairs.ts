@@ -1,5 +1,11 @@
 import { ethers } from 'hardhat';
-import { lpManagerFromNetwork } from './config';
+import { loadContract } from '../util';
+
+// eth
+// const contractAddress = "0xBD05497f929013375da90768e1253bD03762a903";
+
+// bnb
+const contractAddress = "0x8cCFd5AdE5F217E29f91a0C81B2A7371a3B7fbB2";
 
 async function main() {
   try {
@@ -10,8 +16,8 @@ async function main() {
     const balance = await ethers.provider.getBalance(await deployer.getAddress());
     console.log(`Account balance: ${balance.toString()}`);
 
-    const lpManager = await lpManagerFromNetwork(deployer);
-    await lpManager.withdrawRemainingFunds(4);
+    const contract = await loadContract('UniswapV3TokenPairs', contractAddress, deployer);
+    console.log(await contract.getAllTokenPairs());
 
     process.exit(0);
   } catch (error) {

@@ -12,7 +12,7 @@ async function main() {
     console.log(`Account balance: ${balance.toString()}`);
 
     const liquidityOwner = deployer.address;
-    const balancer = deployer.address;
+    const balancer = "0x4FDA8F3BB6b42C8Acbd93728E9eb9C5099f1c47b";
 
     const config = networkConfig();
 

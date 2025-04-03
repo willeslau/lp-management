@@ -26,7 +26,8 @@ contract UniswapV3PoolsProxy is CallbackUtil {
         address token1;
     }
 
-    error PriceSlippageCheck();
+    error MintSlippageError(int24 tick, uint128 liquidity);
+    error BurnSlippageError();
     error UniswapCallFailed(string marker, bytes reason);
 
     function pancakeV3MintCallback(
@@ -100,7 +101,7 @@ contract UniswapV3PoolsProxy is CallbackUtil {
         output = _burn(_pool, _tickLower, _tickUpper, _liquidityReduction);
 
         if (output.amount0 < _amount0Min || output.amount1 < _amount1Min) {
-            revert PriceSlippageCheck();
+            revert BurnSlippageError();
         }
     }
 
@@ -174,8 +175,10 @@ contract UniswapV3PoolsProxy is CallbackUtil {
             revert UniswapCallFailed("am", reason);
         }
 
-        if (output.amount0 < _amount0Min || output.amount1 < _amount1Min)
-            revert PriceSlippageCheck();
+        if (output.amount0 < _amount0Min || output.amount1 < _amount1Min) {
+            (, int24 tick) = _slot0(_tokenPair.pool);
+            revert MintSlippageError(tick, pool.liquidity());
+        }
     }
 
     function _tokensOwned(
