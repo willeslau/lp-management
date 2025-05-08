@@ -9,7 +9,6 @@
     "test": "ENV=unit-test npx hardhat test",
     "coverage": "npx hardhat coverage",
     "clean": "npx hardhat clean && rm -rf artifacts cache coverage type-chains",
-
     "lpManager::list": "npx hardhat run scripts/lpManager/list.ts --network ${NETWORK}",
     "lpManager::mint": "npx hardhat run scripts/lpManager/mint.ts --network ${NETWORK}",
     "lpManager::rebalance0for1": "npx hardhat run scripts/lpManager/rebalance0for1.ts --network ${NETWORK}",
@@ -24,21 +23,36 @@
     "lpManager::changeRebalancer": "npx hardhat run scripts/lpManager/changeRebalancer.ts --network ${NETWORK}",
     "lpManager::getReserves": "npx hardhat run scripts/lpManager/getReserves.ts --network ${NETWORK}",
     "lpManager::closePosition": "npx hardhat run scripts/lpManager/closePosition.ts --network ${NETWORK}",
-
     "lpManager::checkUniswapPosition": "npx hardhat run scripts/lpManager/checkUniswapPosition.ts --network ${NETWORK}",
     "lpManager::getTickSpacing": "npx hardhat run scripts/lpManager/getTickSpacing.ts --network ${NETWORK}",
-
+    "lpManagerV2::deploy": "npx hardhat run scripts/lpManagerV2/deploy.ts --network ${NETWORK}",
+    "lpManagerV2::upgrade": "npx hardhat run scripts/lpManagerV2/upgrade.ts --network ${NETWORK}",
+    "lpManagerV2::deploySwapUtil": "npx hardhat run scripts/lpManagerV2/deploySwapUtil.ts --network ${NETWORK}",
+    "lpManagerV2::openVaults": "npx hardhat run scripts/lpManagerV2/openVaults.ts --network ${NETWORK}",
+    "lpManagerV2::closeVault": "npx hardhat run scripts/lpManagerV2/closeVault.ts --network ${NETWORK}",
+    "lpManagerV2::getVaultInfo": "npx hardhat run scripts/lpManagerV2/getVaultInfo.ts --network ${NETWORK}",
+    "lpManagerV2::injectPrinciple": "npx hardhat run scripts/lpManagerV2/injectPrinciple.ts --network ${NETWORK}",
+    "lpManagerV2::closePosition": "npx hardhat run scripts/lpManagerV2/closePosition.ts --network ${NETWORK}",
+    "lpManagerV2::withdraw": "npx hardhat run scripts/lpManagerV2/withdraw.ts --network ${NETWORK}",
+    "lpManagerV2::rushBuy": "npx hardhat run scripts/lpManagerV2/rushBuy.ts --network ${NETWORK}",
     "supportedToken::deploy": "npx hardhat run scripts/supportedTokens/deploy.ts --network ${NETWORK}",
     "supportedToken::addTokenPair": "npx hardhat run scripts/supportedTokens/addTokenPair.ts --network ${NETWORK}",
+    "supportedToken::addTokenPairs": "npx hardhat run scripts/supportedTokens/addTokenPairs.ts --network ${NETWORK}",
     "supportedToken::getAllTokenPairs": "npx hardhat run scripts/supportedTokens/getAllTokenPairs.ts --network ${NETWORK}",
-
     "lpSwap::swap1for0Debug": "npx hardhat run scripts/liquiditySwap/swap1for0Debug.ts --network ${NETWORK}",
     "lpSwap::swap1for0": "npx hardhat run scripts/liquiditySwap/swap1for0.ts --network ${NETWORK}",
-    "lpSwap::deploy": "npx hardhat run scripts/liquiditySwap/deploy.ts --network ${NETWORK}"
+    "lpSwap::deploy": "npx hardhat run scripts/liquiditySwap/deploy.ts --network ${NETWORK}",
+    "rushBuy::deploy": "npx hardhat run scripts/rushBuy/deploy.ts --network ${NETWORK}",
+    "rushBuy::withdraw": "npx hardhat run scripts/rushBuy/withdraw.ts --network ${NETWORK}",
+    "rushBuy::close": "npx hardhat run scripts/rushBuy/close.ts --network ${NETWORK}",
+    "rushBuy::buy": "npx hardhat run scripts/rushBuy/buy.ts --network ${NETWORK}",
+    "rushBuy::swap": "npx hardhat run scripts/rushBuy/swap.ts --network ${NETWORK}"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@grpc/grpc-js": "^1.13.3",
+    "@grpc/proto-loader": "^0.7.15",
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
     "@nomicfoundation/hardhat-ethers": "^3.0.8",
     "@nomicfoundation/hardhat-ignition": "^0.15.10",
@@ -48,6 +62,8 @@
     "@nomicfoundation/hardhat-verify": "^2.0.0",
     "@nomicfoundation/ignition-core": "^0.15.10",
     "@openzeppelin/contracts": "4.9.6",
+    "@openzeppelin/contracts-upgradeable": "4.9.6",
+    "@openzeppelin/hardhat-upgrades": "^3.9.0",
     "@thanpolas/univ3prices": "^3.0.2",
     "@typechain/ethers-v6": "^0.5.0",
     "@typechain/hardhat": "^9.0.0",
@@ -59,6 +75,7 @@
     "dotenv": "^16.4.7",
     "ethereum-waffle": "^3.4.4",
     "ethers": "^6.13.5",
+    "graphql-request": "^7.1.2",
     "hardhat": "^2.9.9",
     "hardhat-contract-sizer": "^2.10.0",
     "hardhat-gas-reporter": "^1.0.8",
@@ -71,6 +88,7 @@
     "typescript": "^5.8.2"
   },
   "dependencies": {
-    "@uniswap/v3-sdk": "^3.25.2"
+    "@uniswap/v3-sdk": "^3.25.2",
+    "ethereum-bloom-filters": "^1.2.0"
   }
 }

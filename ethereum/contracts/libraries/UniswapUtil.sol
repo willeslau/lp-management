@@ -7,6 +7,20 @@ import {TickMath} from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import {LiquidityAmounts} from "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
 
 contract UniswapUtil {
+    function slot0s(
+        address[] calldata _pools
+    ) public view returns (uint160[] memory sqrtPriceX96s) {
+        sqrtPriceX96s = new uint160[](_pools.length);
+
+        for (uint256 i = 0; i < _pools.length; ) {
+            (sqrtPriceX96s[i], ) =  slot0(_pools[i]);
+
+            unchecked {
+                i++;
+            }
+        }
+    }
+
     function slot0(
         address _pool
     ) public view returns (uint160 sqrtPriceX96, int24 tick) {

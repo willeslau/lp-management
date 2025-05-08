@@ -1,5 +1,5 @@
 import { Contract, ContractRunner, Signer } from 'ethers';
-import { artifacts, ethers, network } from 'hardhat';
+import { artifacts, ethers, network, upgrades } from 'hardhat';
 
 export async function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -15,6 +15,45 @@ export function ensure(predicate: boolean, errorMessage: string): void {
 
 export function isBitSet(n: number, offset: number): boolean {
   return ((n >> offset) & 1) === 1;
+}
+
+export async function upgradeableContract(
+  deployer: Signer,
+  contractAddress: string,
+  contractName: string,
+  isSilent?: boolean,
+): Promise<Contract> {
+  const contractFactory = await ethers.getContractFactory(contractName, deployer);
+
+  if (!isSilent) {
+    console.log(`>>> upgrade contract: ${contractName} at:`, contractAddress);
+  }
+
+  return await upgrades.upgradeProxy(contractAddress, contractFactory);
+}
+
+
+export async function deployUpgradeableContract(
+  deployer: Signer,
+  contractName: string,
+  args: unknown[],
+  isSilent?: boolean,
+): Promise<Contract> {
+  const contractFactory = await ethers.getContractFactory(contractName, deployer);
+
+  if (!isSilent) {
+    console.log(`>>> deploy contract: ${contractName} with (${args.length}) args:`, ...args);
+  }
+
+  const contract = await upgrades.deployProxy(contractFactory, args, {
+    kind: 'uups'
+  });
+  await contract.waitForDeployment();
+
+  if (!isSilent) {
+    console.log(`>> contract ${contractName} deployed with address ${await contract.getAddress()}`);
+  }
+  return contract;
 }
 
 export async function deployContractWithDeployer(

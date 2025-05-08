@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {IUniswapV3TokenPairs, TokenPair} from "./interfaces/IUniswapV3TokenPairs.sol";
+import {IUniswapV3TokenPairs, TokenPair, TokenPairAdresses} from "./interfaces/IUniswapV3TokenPairs.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {
+    TokenAddressesNotSorted,
+    PairAlreadyExists,
+    InvalidPoolAddress,
+    InvalidTokenAddress,
+    TokenPairNotExits
+} from "./Errors.sol";
 
 contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
-    mapping(uint256 => TokenPair) private _tokenPairs;
-    mapping(address => mapping(address => uint8)) private _pairIds;
-    uint8 private _nextPairId = 1;
 
-    error TokenAddressesNotSorted();
-    error PairAlreadyExists();
-    error InvalidPoolAddress();
-    error InvalidTokenAddress();
-    error InvalidPairId();
 
     event TokenPairAdded(
         uint8 indexed pairId,
@@ -23,13 +22,40 @@ contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
         uint24 poolFee
     );
 
+    mapping(uint256 => TokenPair) private _tokenPairs;
+    mapping(bytes32 => uint8) private _pairIds;
+
+    uint8 private _nextPairId = 1;
+
+    function getTokenPairAddress(
+        uint8 _id
+    ) external view returns (TokenPairAdresses memory) {
+        TokenPair storage pair = _tokenPairs[_id];
+
+        if (pair.id == 0) {
+            revert TokenPairNotExits(pair.id);
+        }
+
+        return
+            TokenPairAdresses({
+                pool: pair.pool,
+                token0: pair.token0,
+                token1: pair.token1
+            });
+    }
+
+    function getTokenPairPool(uint8 _id) external view returns (address pool) {
+        pool = _tokenPairs[_id].pool;
+        if (pool == address(0)) revert TokenPairNotExits(_id);
+    }
+
     function addTokenPair(
         address pool,
         address token0,
         address token1,
         uint24 poolFee
     ) external onlyOwner returns (uint256) {
-        _validateTokenPair(pool, token0, token1);
+        bytes32 key = _validateTokenPair(pool, token0, token1, poolFee);
 
         uint8 pairId = _nextPairId++;
         _tokenPairs[pairId] = TokenPair({
@@ -40,7 +66,7 @@ contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
             poolFee: poolFee
         });
 
-        _pairIds[token0][token1] = pairId;
+        _pairIds[key] = pairId;
 
         emit TokenPairAdded(pairId, token0, token1, pool, poolFee);
 
@@ -49,18 +75,22 @@ contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
 
     function getTokenPairId(
         address token0,
-        address token1
+        address token1,
+        uint24 poolFee
     ) external view returns (uint8) {
         (token0, token1) = _sortTokens(token0, token1);
-        return _pairIds[token0][token1];
+        bytes32 key = _pairIdKey(token0, token1, poolFee);
+        return _pairIds[key];
     }
 
     function isTokenPairSupported(
         address token0,
-        address token1
+        address token1,
+        uint24 poolFee
     ) external view returns (bool) {
         (token0, token1) = _sortTokens(token0, token1);
-        return _pairIds[token0][token1] > 0;
+        bytes32 key = _pairIdKey(token0, token1, poolFee);
+        return _pairIds[key] > 0;
     }
 
     function getAllTokenPairs() external view returns (TokenPair[] memory) {
@@ -74,20 +104,22 @@ contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
 
     function getTokenPair(
         uint8 _id
-    ) external view override returns (TokenPair memory) {
-        return _tokenPairs[_id];
+    ) public view override returns (TokenPair memory pair) {
+        pair = _tokenPairs[_id];
+
+        if (pair.id == 0) {
+            revert TokenPairNotExits(pair.id);
+        }
     }
 
     function getTokenPairAddresses(
         uint8 _id
     ) external view override returns (address, address) {
-        TokenPair memory pair = _tokenPairs[_id];
+        TokenPair memory pair = getTokenPair(_id);
         return (pair.token0, pair.token1);
     }
 
-    function isSupportTokenPair(
-        uint8 _id
-    ) external view override returns (bool) {
+    function isSupportTokenPair(uint8 _id) public view override returns (bool) {
         return _id > 0 && _id < _nextPairId;
     }
 
@@ -99,8 +131,9 @@ contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
     function _validateTokenPair(
         address pool,
         address token0,
-        address token1
-    ) internal view {
+        address token1,
+        uint24 poolFee
+    ) internal view returns (bytes32) {
         if (pool == address(0)) {
             revert InvalidPoolAddress();
         }
@@ -113,9 +146,20 @@ contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
             revert TokenAddressesNotSorted();
         }
 
-        if (_pairIds[token0][token1] != 0) {
+        bytes32 key = _pairIdKey(token0, token1, poolFee);
+        if (_pairIds[key] != 0) {
             revert PairAlreadyExists();
         }
+
+        return key;
+    }
+
+    function _pairIdKey(
+        address token0,
+        address token1,
+        uint24 poolFee
+    ) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(token0, token1, poolFee));
     }
 
     function _sortTokens(

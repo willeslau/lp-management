@@ -3,6 +3,7 @@ import "@nomicfoundation/hardhat-ethers";
 import "@nomicfoundation/hardhat-toolbox";
 import "hardhat-contract-sizer";
 import "solidity-coverage";
+import '@openzeppelin/hardhat-upgrades';
 
 // load .env config
 const dotenvConfig = require("dotenv").config;

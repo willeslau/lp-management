@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { ethers, keccak256, toUtf8Bytes } from "ethers";
 
-const error = "0xe75959500000000000000000000000000000000000000000000000000000000000001d600000000000000000000000000000000000000000000509b65be9d19fe57d19f6";
+const error = "0xa72c86a90000000000000000000000000000000000000000000000000000000000000000";
 
 interface ABIInput {
   type: string;
@@ -47,7 +47,7 @@ function listErrorSelectors(artifactsDir: string): void {
           if (errorFragment === null) {
             continue;
           }
-
+          console.log(errorFragment.name);
           console.log(iface.decodeErrorResult(errorFragment, error));
         }
       } catch (error) {
