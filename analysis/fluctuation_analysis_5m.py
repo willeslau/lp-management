@@ -59,14 +59,14 @@ def evaluate_vol_model(df):
                                  (df['lower_band'] - df['low']) / df['open'],
                                  0)
     upper_breach = df[df['upper_breach'] > 0]
-    # lower_breach = df[df['lower_breach'] > 0]
+    lower_breach = df[df['lower_breach'] > 0]
 
     metrics.update({
         'num_upper_breach': len(upper_breach),
         'avg_upper_breach': upper_breach['upper_breach'].mean(),
-        # 'avg_lower_breach': lower_breach['lower_breach'].mean(),
+        'avg_lower_breach': lower_breach['lower_breach'].mean(),
         'max_upper_breach': df['upper_breach'].max(),
-        # 'max_lower_breach': df['lower_breach'].max()
+        'max_lower_breach': df['lower_breach'].max()
     })
     
     # 3. Range efficiency
