@@ -11,6 +11,7 @@ analysis/bin
 analysis/include
 analysis/lib
 analysis/pyvenv.cfg
+analysis/*.csv
 .DS_Store
 
 app
