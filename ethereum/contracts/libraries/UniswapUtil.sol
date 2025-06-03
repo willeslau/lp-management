@@ -7,6 +7,32 @@ import {TickMath} from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import {LiquidityAmounts} from "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
 
 contract UniswapUtil {
+    function getFeeGrowthInside(
+        address _pool,
+        int24 _tickLower,
+        int24 _tickUpper
+    ) external view returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {
+        (, int24 tickCurrent ) = slot0(_pool);
+
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
+
+        (, , uint256 lowerFeeGrowthOutside0X128, uint256 lowerFeeGrowthOutside1X128, , , , ) = pool.ticks(_tickLower);
+        (, , uint256 upperFeeGrowthOutside0X128, uint256 upperFeeGrowthOutside1X128, , , , ) = pool.ticks(_tickUpper);
+
+        if (tickCurrent < _tickLower) {
+            feeGrowthInside0X128 = lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
+            feeGrowthInside1X128 = lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
+        } else if (tickCurrent < _tickUpper) {
+            uint256 feeGrowthGlobal0X128 = pool.feeGrowthGlobal0X128();
+            uint256 feeGrowthGlobal1X128 = pool.feeGrowthGlobal1X128();
+            feeGrowthInside0X128 = feeGrowthGlobal0X128 - lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
+            feeGrowthInside1X128 = feeGrowthGlobal1X128 - lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
+        } else {
+            feeGrowthInside0X128 = upperFeeGrowthOutside0X128 - lowerFeeGrowthOutside0X128;
+            feeGrowthInside1X128 = upperFeeGrowthOutside1X128 - lowerFeeGrowthOutside1X128;
+        }
+    }
+
     function slot0s(
         address[] calldata _pools
     ) public view returns (uint160[] memory sqrtPriceX96s) {

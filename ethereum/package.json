@@ -35,6 +35,15 @@
     "lpManagerV2::closePosition": "npx hardhat run scripts/lpManagerV2/closePosition.ts --network ${NETWORK}",
     "lpManagerV2::withdraw": "npx hardhat run scripts/lpManagerV2/withdraw.ts --network ${NETWORK}",
     "lpManagerV2::rushBuy": "npx hardhat run scripts/lpManagerV2/rushBuy.ts --network ${NETWORK}",
+    "lpManagerV3::deploy": "npx hardhat run scripts/lpManagerV3/deploy.ts --network ${NETWORK}",
+    "lpManagerV3::upgrade": "npx hardhat run scripts/lpManagerV3/upgrade.ts --network ${NETWORK}",
+    "lpManagerV3::rebalance": "npx hardhat run scripts/lpManagerV3/rebalance.ts --network ${NETWORK}",
+    "lpManagerV3::getPositionFees": "npx hardhat run scripts/lpManagerV3/getPositionFees.ts --network ${NETWORK}",
+    "lpManagerV3::monitor": "npx hardhat run scripts/lpManagerV3/monitor.ts --network ${NETWORK}",
+    "lpManagerV3::closePosition": "npx hardhat run scripts/lpManagerV3/closePosition.ts --network ${NETWORK}",
+    "lpManagerV3::withdraw": "npx hardhat run scripts/lpManagerV3/withdraw.ts --network ${NETWORK}",
+    "lpManagerV3::checkFee": "npx hardhat run scripts/lpManagerV3/checkFee.ts --network ${NETWORK}",
+
     "supportedToken::deploy": "npx hardhat run scripts/supportedTokens/deploy.ts --network ${NETWORK}",
     "supportedToken::addTokenPair": "npx hardhat run scripts/supportedTokens/addTokenPair.ts --network ${NETWORK}",
     "supportedToken::addTokenPairs": "npx hardhat run scripts/supportedTokens/addTokenPairs.ts --network ${NETWORK}",
@@ -46,7 +55,9 @@
     "rushBuy::withdraw": "npx hardhat run scripts/rushBuy/withdraw.ts --network ${NETWORK}",
     "rushBuy::close": "npx hardhat run scripts/rushBuy/close.ts --network ${NETWORK}",
     "rushBuy::buy": "npx hardhat run scripts/rushBuy/buy.ts --network ${NETWORK}",
-    "rushBuy::swap": "npx hardhat run scripts/rushBuy/swap.ts --network ${NETWORK}"
+    "rushBuy::swap": "npx hardhat run scripts/rushBuy/swap.ts --network ${NETWORK}",
+    "approve": "npx hardhat run scripts/approve.ts --network ${NETWORK}",
+    "deployWTBC": "npx hardhat run scripts/WBTCDeploy.ts --network ${NETWORK}"
   },
   "author": "",
   "license": "ISC",
@@ -88,6 +99,7 @@
     "typescript": "^5.8.2"
   },
   "dependencies": {
+    "@uniswap/sdk-core": "^7.7.2",
     "@uniswap/v3-sdk": "^3.25.2",
     "ethereum-bloom-filters": "^1.2.0"
   }

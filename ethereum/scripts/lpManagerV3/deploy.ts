@@ -2,7 +2,7 @@ import { ethers } from 'hardhat';
 import { deployContractWithDeployer, deployUpgradeableContract } from '../util';
 import { networkConfig } from './config';
 
-const liquidityOwner = "0x3cF8893a0417b60EF2B181dAaCe87E8439635e57";
+const liquidityOwner = "0x75EE99e3a4D487a34F4ab0449B4895Fed79e23E2";
 const balancer = "0x4FDA8F3BB6b42C8Acbd93728E9eb9C5099f1c47b";
 
 async function main() {
@@ -26,19 +26,15 @@ async function main() {
       console.log(`UniswapUtil deployed to ${await uniswapUtil.getAddress()}`);
     }
 
-    if (config.swapUtil === undefined) {
-      throw Error(`Swap uitl not deployed `);
-    }
+    // const contract = await deployUpgradeableContract(
+    //   deployer,
+    //   'UniswapV3LpManagerV3',
+    //   [liquidityOwner, balancer],
+    //   false
+    // );
 
-    const contract = await deployUpgradeableContract(
-      deployer,
-      'UniswapV3LpManagerV2',
-      [config.supportedTokenPair, config.swapUtil, liquidityOwner, balancer],
-      false
-    );
-
-    await contract.waitForDeployment();
-    console.log(`UniswapV3LpManagerV2 deployed to ${await contract.getAddress()}`);
+    // await contract.waitForDeployment();
+    // console.log(`UniswapV3LpManagerV3 deployed to ${await contract.getAddress()}`);
 
     process.exit(0);
   } catch (error) {
