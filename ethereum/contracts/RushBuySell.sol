@@ -20,10 +20,7 @@ struct BuyParams {
 
 /// @title Uniswap V3 LP Manager
 /// @notice Manages Uniswap V3 liquidity positions
-contract RushBuySell is
-    UUPSUpgradeable,
-    OwnableUpgradeable
-{
+contract RushBuySell is UUPSUpgradeable, OwnableUpgradeable {
     ISwapUtil public swapUtil;
 
     uint8 public stage;
@@ -37,9 +34,7 @@ contract RushBuySell is
         _disableInitializers();
     }
 
-    function initialize(
-        address _swapUtil
-    ) external initializer {
+    function initialize(address _swapUtil) external initializer {
         __Ownable_init();
 
         swapUtil = ISwapUtil(_swapUtil);
@@ -56,11 +51,7 @@ contract RushBuySell is
             _performBuy(_pool, _buyParams.tokenIn, _buyParams.swap);
             stage = 1;
         } else if (stage == 1) {
-            _performSell(
-                _pool,
-                !_buyParams.swap.zeroForOne,
-                _sellParams
-            );
+            _performSell(_pool, !_buyParams.swap.zeroForOne, _sellParams);
             stage = 2;
 
             emit StrategyCompleted();
@@ -69,11 +60,11 @@ contract RushBuySell is
         }
     }
 
-    function reset() external onlyOwner() {
+    function reset() external onlyOwner {
         stage = 0;
     }
 
-    function withdraw(address _token) external onlyOwner() {
+    function withdraw(address _token) external onlyOwner {
         uint256 balance = IERC20(_token).balanceOf(address(this));
         IERC20(_token).transfer(msg.sender, balance);
     }
@@ -94,10 +85,10 @@ contract RushBuySell is
         SellParams calldata _params
     ) internal {
         SwapParams memory params = SwapParams({
-            swapper: _params.swapper, 
-            zeroForOne: _zeroForOne, 
+            swapper: _params.swapper,
+            zeroForOne: _zeroForOne,
             priceSqrtX96Limit: _params.priceSqrtX96Limit,
-            amountOutMin: 0, 
+            amountOutMin: 0,
             amountIn: int256(IERC20(_params.tokenIn).balanceOf(address(this)))
         });
 

@@ -82,7 +82,7 @@ async function setupTest(): Promise<TestSetup> {
   const lpManager = new LPManagerV2(
     await deployUpgradeableContract(
       balancer,
-      "UniswapV3LpManagerV2",
+      "UniswapV3LpManagerV3",
       [
         await supportedTokenPairs.getAddress(),
         await swapUtil.getAddress(),
@@ -159,7 +159,7 @@ async function setupUniswapPoolPosition(
   const pos = await lpManager.mintNewPosition(mintParams.tokenPairId, params);
 }
 
-describe("UniswapV3LpManagerV2", () => {
+describe("UniswapV3LpManagerV3", () => {
   let testSetup: TestSetup;
   const tokenPairId = 1;
 

@@ -75,11 +75,7 @@ interface IUniswapV3LpManagerV2 {
         uint128 protocolFee1
     );
 
-    event TokensSent(
-        bool isSentToPool,
-        uint256 amount0,
-        uint256 amount1
-    );
+    event TokensSent(bool isSentToPool, uint256 amount0, uint256 amount1);
 
     event VaultPositionOpened(
         uint64 indexed operationNonce,
@@ -100,7 +96,7 @@ interface IUniswapV3LpManagerV2 {
         uint256 reserve1
     );
 
-    function getOperationNonce() external view returns(uint64);
+    function getOperationNonce() external view returns (uint64);
 
     function listVaults(
         uint32[] calldata _vaultIds

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.0;
 
-
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -33,8 +32,11 @@ contract UniswapV3LpManagerV2 is
 
     error CloseVaultPositionFirst(uint32 vaultId, PositionInfo position);
     error SwapAmountExceedReserve(int256 amountIn, uint256 reserve);
-    error CloseVaultPositionOutdatedParams(uint32 vaultId, PositionInfo position);
-    
+    error CloseVaultPositionOutdatedParams(
+        uint32 vaultId,
+        PositionInfo position
+    );
+
     /// @notice Tracks all the vault currently active in the contract
     VaultTracker private vaultTracker;
     uint64 public operationNonce;
@@ -62,7 +64,7 @@ contract UniswapV3LpManagerV2 is
         operationNonce = 1;
     }
 
-    function getOperationNonce() external view returns(uint64) {
+    function getOperationNonce() external view returns (uint64) {
         return operationNonce;
     }
 
@@ -162,7 +164,8 @@ contract UniswapV3LpManagerV2 is
     function closeVault(uint32 _vaultId) external onlyAddress(liquidityOwner) {
         Vault storage vault = vaultTracker.getVault(_vaultId);
 
-        if (vault.hasActivePosition()) revert CloseVaultPositionFirst(_vaultId, vault.getActivePosition());
+        if (vault.hasActivePosition())
+            revert CloseVaultPositionFirst(_vaultId, vault.getActivePosition());
 
         vaultTracker.removeVault(vault.tokenPairId, _vaultId);
 
@@ -184,7 +187,10 @@ contract UniswapV3LpManagerV2 is
         Vault storage vault = vaultTracker.getVault(_params.vaultId);
 
         PositionInfo memory position = vault.getActivePosition();
-        if (position.tickLower != _params.tickLower && position.tickUpper != _params.tickUpper) {
+        if (
+            position.tickLower != _params.tickLower &&
+            position.tickUpper != _params.tickUpper
+        ) {
             revert CloseVaultPositionOutdatedParams(_params.vaultId, position);
         }
 
@@ -225,13 +231,12 @@ contract UniswapV3LpManagerV2 is
         vaultTracker.unlockTickRange(position.tickLower, position.tickUpper);
         vault.clearPosition();
 
-        (uint256 reserve0, uint256 reserve1) = vault.increaseReserves(amount0Collected, amount1Collected);
-
-        emit TokensSent(
-            false,
+        (uint256 reserve0, uint256 reserve1) = vault.increaseReserves(
             amount0Collected,
             amount1Collected
         );
+
+        emit TokensSent(false, amount0Collected, amount1Collected);
 
         nonce += 1;
         emit VaultPositionClosed(
@@ -252,7 +257,10 @@ contract UniswapV3LpManagerV2 is
 
         // split close and rebalance in two txns for gas
         if (vault.hasActivePosition())
-            revert CloseVaultPositionFirst(_params.vaultId, vault.getActivePosition());
+            revert CloseVaultPositionFirst(
+                _params.vaultId,
+                vault.getActivePosition()
+            );
 
         TokenPairAdresses memory tokenPair = supportedTokenPairs
             .getTokenPairAddress(vault.tokenPairId);
@@ -288,16 +296,16 @@ contract UniswapV3LpManagerV2 is
         reserve0 -= output.amount0;
         reserve1 -= output.amount1;
 
-        vault.setPosition(_params.mint.tickLower, _params.mint.tickUpper, output.liquidity);
+        vault.setPosition(
+            _params.mint.tickLower,
+            _params.mint.tickUpper,
+            output.liquidity
+        );
         vault.setReserves(reserve0, reserve1);
 
         uint64 nonce = operationNonce;
 
-        emit TokensSent(
-            true,
-            output.amount0,
-            output.amount1
-        );
+        emit TokensSent(true, output.amount0, output.amount1);
         emit VaultPositionOpened(
             nonce,
             liquidityOwner,
@@ -312,7 +320,7 @@ contract UniswapV3LpManagerV2 is
         operationNonce = nonce + 1;
     }
 
-    function withdraw(address _token) external onlyOwner() {
+    function withdraw(address _token) external onlyOwner {
         uint256 balance = IERC20(_token).balanceOf(address(this));
         IERC20(_token).transfer(msg.sender, balance);
     }
@@ -329,7 +337,7 @@ contract UniswapV3LpManagerV2 is
     // ==================== Internal Methods ====================
 
     function _prepareFeeForCollection(
-        uint64  _operationNonce,
+        uint64 _operationNonce,
         uint32 _vaultId,
         Vault storage _vault,
         IUniswapV3Pool _pool,
@@ -352,7 +360,14 @@ contract UniswapV3LpManagerV2 is
             fee1 -= protocolFee1;
         }
 
-        emit FeesCollected(_operationNonce, _vaultId, fee0, fee1, protocolFee0, protocolFee1);
+        emit FeesCollected(
+            _operationNonce,
+            _vaultId,
+            fee0,
+            fee1,
+            protocolFee0,
+            protocolFee1
+        );
 
         _vault.increaseFees(fee0, fee1);
 

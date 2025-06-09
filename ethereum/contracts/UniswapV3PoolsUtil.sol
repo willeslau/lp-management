@@ -146,7 +146,13 @@ contract UniswapV3PoolsUtil is CallbackUtil {
         );
 
         try
-            pool.mint(address(this), _tickLower, _tickUpper, output.liquidity, m)
+            pool.mint(
+                address(this),
+                _tickLower,
+                _tickUpper,
+                output.liquidity,
+                m
+            )
         returns (uint256 a0, uint256 a1) {
             output.amount0 = a0;
             output.amount1 = a1;

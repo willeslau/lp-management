@@ -3,17 +3,9 @@ pragma solidity ^0.8.0;
 
 import {IUniswapV3TokenPairs, TokenPair, TokenPairAdresses} from "./interfaces/IUniswapV3TokenPairs.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {
-    TokenAddressesNotSorted,
-    PairAlreadyExists,
-    InvalidPoolAddress,
-    InvalidTokenAddress,
-    TokenPairNotExits
-} from "./Errors.sol";
+import {TokenAddressesNotSorted, PairAlreadyExists, InvalidPoolAddress, InvalidTokenAddress, TokenPairNotExits} from "./Errors.sol";
 
 contract UniswapV3TokenPairs is IUniswapV3TokenPairs, Ownable {
-
-
     event TokenPairAdded(
         uint8 indexed pairId,
         address indexed token0,

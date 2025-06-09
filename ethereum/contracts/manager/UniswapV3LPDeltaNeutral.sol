@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.0;
 
-
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {TickMath} from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 
@@ -14,11 +13,17 @@ import {LiquidityChangeOutput} from "../interfaces/IUniswapV3PoolProxy.sol";
 import {UniswapV3PoolsUtilV2, PoolAddresses, Position} from "../UniswapV3PoolsUtilV2.sol";
 
 library LibPoolAddresses {
-    function balance0(PoolAddresses memory self, address _who) internal view returns (uint256) {
+    function balance0(
+        PoolAddresses memory self,
+        address _who
+    ) internal view returns (uint256) {
         return IERC20(self.token0).balanceOf(_who);
     }
 
-    function balance1(PoolAddresses memory self, address _who) internal view returns (uint256) {
+    function balance1(
+        PoolAddresses memory self,
+        address _who
+    ) internal view returns (uint256) {
         return IERC20(self.token1).balanceOf(_who);
     }
 }
@@ -49,8 +54,21 @@ contract UniswapV3LPDeltaNeutral is
     mapping(address => DeltaNeutralState) public states;
     mapping(address => Position) public positions;
 
-    event PositionOpen(address pool, int24 tickLower, uint160 priceSqrt, int24 tickUpper, uint256 amount0, uint256 amount1);
-    event PostionClosed(address pool, int24 tickLower, int24 tickUpper, uint128 amount0, uint128 amount1);
+    event PositionOpen(
+        address pool,
+        int24 tickLower,
+        uint160 priceSqrt,
+        int24 tickUpper,
+        uint256 amount0,
+        uint256 amount1
+    );
+    event PostionClosed(
+        address pool,
+        int24 tickLower,
+        int24 tickUpper,
+        uint128 amount0,
+        uint128 amount1
+    );
 
     error StillInRange();
     error PoolHasActivePosition();
@@ -79,16 +97,19 @@ contract UniswapV3LPDeltaNeutral is
         return positions[_pool].liquidity > 0;
     }
 
-    function getPoolPositionInfo(address _pool) external view returns(Position memory pos, bool inRange) {
+    function getPoolPositionInfo(
+        address _pool
+    ) external view returns (Position memory pos, bool inRange) {
         pos = positions[_pool];
         inRange = isPositionInRange(_pool, pos);
     }
 
     /// @dev Try to neutralize the volatile token delta.
     /// @param _deltaTolerance The volatile token tolerance. If the current position's delta is within this number, txn reverts.
-    function neutralizeVolatileExposure(address _pool, uint256 _deltaTolerance) external onlyAddress(balancer) {
-
-    }
+    function neutralizeVolatileExposure(
+        address _pool,
+        uint256 _deltaTolerance
+    ) external onlyAddress(balancer) {}
 
     /// @dev Create the delta neutral params for a pool
     /// @param _isToken0Target A flag indicates if token 0 is the target token to achieve delta neutral
@@ -109,7 +130,6 @@ contract UniswapV3LPDeltaNeutral is
         if (_isToken0Target) {
             // this means token 0 is the target token to achieve 0 delta, we will use token 1 to swap
             _transferIn(_pool, _targetExposure, _baseTokenBudget);
-
         } else {
             // this means token 1 is the target token to achieve 0 delta, we will use token 0 to swap
             _transferIn(_pool, _baseTokenBudget, _targetExposure);
@@ -119,7 +139,10 @@ contract UniswapV3LPDeltaNeutral is
         states[_pool].targetExposure = _targetExposure;
     }
 
-    function rebalance(address _pool, uint160 _rangeNumerator) external onlyAddress(balancer) {
+    function rebalance(
+        address _pool,
+        uint160 _rangeNumerator
+    ) external onlyAddress(balancer) {
         if (!isDeltaNeutralConfiged(_pool)) revert DeltaNeutralNoConfig();
 
         Position memory position = positions[_pool];
@@ -130,7 +153,10 @@ contract UniswapV3LPDeltaNeutral is
         }
     }
 
-    function closePosition(address _pool, Position memory _position) public onlyAddress(balancer) {
+    function closePosition(
+        address _pool,
+        Position memory _position
+    ) public onlyAddress(balancer) {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         _collectFees(pool, _position);
@@ -145,42 +171,72 @@ contract UniswapV3LPDeltaNeutral is
 
         delete positions[_pool];
 
-        emit PostionClosed(_pool, _position.tickLower, _position.tickUpper, amount0Collected, amount1Collected);
+        emit PostionClosed(
+            _pool,
+            _position.tickLower,
+            _position.tickUpper,
+            amount0Collected,
+            amount1Collected
+        );
     }
 
-    function withdraw(address _token) external onlyOwner() {
+    function withdraw(address _token) external onlyOwner {
         uint256 balance = IERC20(_token).balanceOf(address(this));
         IERC20(_token).transfer(liquidityOwner, balance);
     }
 
-    function withdraw(address _token, uint256 _amount) external onlyOwner() {
+    function withdraw(address _token, uint256 _amount) external onlyOwner {
         IERC20(_token).transfer(liquidityOwner, _amount);
     }
 
     // ==================== Internal Methods ====================
 
-    function _transferIn(address _pool, uint256 _amount0, uint256 _amount1) internal {
+    function _transferIn(
+        address _pool,
+        uint256 _amount0,
+        uint256 _amount1
+    ) internal {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         if (_amount0 > 0) {
             address token0 = pool.token0();
-            IERC20(token0).safeTransferFrom(msg.sender, address(this), _amount0);
+            IERC20(token0).safeTransferFrom(
+                msg.sender,
+                address(this),
+                _amount0
+            );
         }
 
         if (_amount1 > 0) {
             address token1 = pool.token1();
-            IERC20(token1).safeTransferFrom(msg.sender, address(this), _amount1);
+            IERC20(token1).safeTransferFrom(
+                msg.sender,
+                address(this),
+                _amount1
+            );
         }
     }
 
-    function isPositionInRange(address _pool, Position memory _position) internal view returns (bool) {
+    function isPositionInRange(
+        address _pool,
+        Position memory _position
+    ) internal view returns (bool) {
         (, int24 currentTick) = _slot0(_pool);
-        return _position.tickLower <= currentTick && currentTick <= _position.tickUpper;
+        return
+            _position.tickLower <= currentTick &&
+            currentTick <= _position.tickUpper;
     }
 
-    function _processCurrentPosition(address _pool, Position memory _position, uint160 _rangeNumerator) internal {
+    function _processCurrentPosition(
+        address _pool,
+        Position memory _position,
+        uint160 _rangeNumerator
+    ) internal {
         (, int24 currentTick) = _slot0(_pool);
-        if (_position.tickLower <= currentTick && currentTick <= _position.tickUpper) {
+        if (
+            _position.tickLower <= currentTick &&
+            currentTick <= _position.tickUpper
+        ) {
             revert StillInRange();
         }
 
@@ -188,7 +244,9 @@ contract UniswapV3LPDeltaNeutral is
         _createPosition(_pool, _rangeNumerator);
     }
 
-    function _getPoolAddresses(address _pool) internal view returns (PoolAddresses memory poolAddresses) {
+    function _getPoolAddresses(
+        address _pool
+    ) internal view returns (PoolAddresses memory poolAddresses) {
         poolAddresses.token0 = IUniswapV3Pool(_pool).token0();
         poolAddresses.token1 = IUniswapV3Pool(_pool).token1();
     }
@@ -196,13 +254,25 @@ contract UniswapV3LPDeltaNeutral is
     function _createPosition(address _pool, uint160 _rangeNumerator) internal {
         PoolAddresses memory addresses = _getPoolAddresses(_pool);
 
-        if (states[_pool].isToken0Target) _addPositionToken0(_pool, addresses, states[_pool].targetExposure, _rangeNumerator);
-        else _addPositionToken1(_pool, addresses, states[_pool].targetExposure, _rangeNumerator);
+        if (states[_pool].isToken0Target)
+            _addPositionToken0(
+                _pool,
+                addresses,
+                states[_pool].targetExposure,
+                _rangeNumerator
+            );
+        else
+            _addPositionToken1(
+                _pool,
+                addresses,
+                states[_pool].targetExposure,
+                _rangeNumerator
+            );
     }
 
     // function floorTick(int24 targetTick, int24 tickSpacing) public pure returns (int24) {
     //     int24 remainder = targetTick % tickSpacing;
-        
+
     //     int24 tick = targetTick - remainder;
 
     //     if (targetTick < 0 && remainder != 0) {
@@ -226,10 +296,16 @@ contract UniswapV3LPDeltaNeutral is
     //     return tick;
     // }
 
-    function _addPositionToken1(address _pool, PoolAddresses memory _addresses, uint256 amount1, uint160 _rangeNumerator) internal {
+    function _addPositionToken1(
+        address _pool,
+        PoolAddresses memory _addresses,
+        uint256 amount1,
+        uint160 _rangeNumerator
+    ) internal {
         (uint160 priceSqrt, int24 currentTick) = _slot0(_pool);
 
-        uint160 priceSqrtLower = (RANGE_DENOMINATOR - _rangeNumerator) * priceSqrt / RANGE_DENOMINATOR;
+        uint160 priceSqrtLower = ((RANGE_DENOMINATOR - _rangeNumerator) *
+            priceSqrt) / RANGE_DENOMINATOR;
         int24 tickLower = TickMath.getTickAtSqrtRatio(priceSqrtLower);
         int24 tickUpper = currentTick - 1;
 
@@ -247,13 +323,26 @@ contract UniswapV3LPDeltaNeutral is
         positions[_pool].tickUpper = tickUpper;
         positions[_pool].liquidity = output.liquidity;
 
-        emit PositionOpen(_pool, tickLower, priceSqrt, tickUpper, output.amount0, output.amount1);
+        emit PositionOpen(
+            _pool,
+            tickLower,
+            priceSqrt,
+            tickUpper,
+            output.amount0,
+            output.amount1
+        );
     }
 
-    function _addPositionToken0(address _pool, PoolAddresses memory _addresses, uint256 amount0, uint160 _rangeNumerator) internal {
+    function _addPositionToken0(
+        address _pool,
+        PoolAddresses memory _addresses,
+        uint256 amount0,
+        uint160 _rangeNumerator
+    ) internal {
         (uint160 priceSqrt, int24 currentTick) = _slot0(_pool);
 
-        uint160 priceSqrtLower = (RANGE_DENOMINATOR + _rangeNumerator) * priceSqrt / RANGE_DENOMINATOR;
+        uint160 priceSqrtLower = ((RANGE_DENOMINATOR + _rangeNumerator) *
+            priceSqrt) / RANGE_DENOMINATOR;
         int24 tickUpper = TickMath.getTickAtSqrtRatio(priceSqrtLower);
         int24 tickLower = currentTick + 1;
 
@@ -271,7 +360,14 @@ contract UniswapV3LPDeltaNeutral is
         positions[_pool].tickUpper = tickUpper;
         positions[_pool].liquidity = output.liquidity;
 
-        emit PositionOpen(_pool, tickLower, priceSqrt, tickUpper, output.amount0, output.amount1);
+        emit PositionOpen(
+            _pool,
+            tickLower,
+            priceSqrt,
+            tickUpper,
+            output.amount0,
+            output.amount1
+        );
     }
 
     /**

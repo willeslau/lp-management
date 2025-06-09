@@ -148,7 +148,13 @@ contract UniswapV3PoolsUtilV2 is CallbackUtil {
         bytes memory m = abi.encode(_addresses);
 
         try
-            IUniswapV3Pool(_pool).mint(address(this), _tickLower, _tickUpper, output.liquidity, m)
+            IUniswapV3Pool(_pool).mint(
+                address(this),
+                _tickLower,
+                _tickUpper,
+                output.liquidity,
+                m
+            )
         returns (uint256 a0, uint256 a1) {
             output.amount0 = a0;
             output.amount1 = a1;

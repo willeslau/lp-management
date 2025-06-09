@@ -18,14 +18,11 @@ import {ISwapUtil, SwapParams, Swapper} from "./SwapUtil.sol";
 
 /// @title Uniswap V3 LP Manager
 /// @notice Manages Uniswap V3 liquidity positions
-contract RushBuy is
-    UUPSUpgradeable,
-    OwnableUpgradeable
-{
+contract RushBuy is UUPSUpgradeable, OwnableUpgradeable {
     using SafeERC20 for IERC20;
 
-    uint160 constant public RATIO_SQRT_BASE = 10000;
-    uint128 constant public ONE_ETHER = uint128(1 ether);
+    uint160 public constant RATIO_SQRT_BASE = 10000;
+    uint128 public constant ONE_ETHER = uint128(1 ether);
     uint256 constant Q96 = 2 ** 96;
     uint256 constant Q192 = 2 ** 192;
 
@@ -38,20 +35,15 @@ contract RushBuy is
 
     struct SwapState {
         bool zeroForOne;
-
         int24 tickLower;
         int24 tickUpper;
-
         uint160 priceRatioLowerX96;
         uint160 priceRatioX96;
         uint160 priceRatioUpperX96;
-
         uint160 priceLimitSqrtX96;
         uint256 priceLimitX96;
-
         int256 amountIn;
         int256 amountOut;
-
         uint256 rX96;
     }
 
@@ -87,32 +79,39 @@ contract RushBuy is
         _disableInitializers();
     }
 
-    function initialize(
-        address _swapUtil
-    ) external initializer {
+    function initialize(address _swapUtil) external initializer {
         __Ownable_init();
         swapUtil = ISwapUtil(_swapUtil);
     }
 
-    function validateBuyParams(BuyParams calldata _buyParams, uint24 _fee) external view returns(SwapState memory swap) {
+    function validateBuyParams(
+        BuyParams calldata _buyParams,
+        uint24 _fee
+    ) external view returns (SwapState memory swap) {
         IUniswapV3Pool pool = IUniswapV3Pool(_buyParams.pool);
 
         if (pool.token0() != _buyParams.token0) revert InvalidPool();
         if (pool.token1() != _buyParams.token1) revert InvalidPool();
         if (pool.fee() != _fee) revert InvalidPool();
 
-        if (IERC20Metadata(_buyParams.token0).decimals() != _buyParams.decimal0) revert InvalidPool();
-        if (IERC20Metadata(_buyParams.token1).decimals() != _buyParams.decimal1) revert InvalidPool();
+        if (IERC20Metadata(_buyParams.token0).decimals() != _buyParams.decimal0)
+            revert InvalidPool();
+        if (IERC20Metadata(_buyParams.token1).decimals() != _buyParams.decimal1)
+            revert InvalidPool();
 
         return calculateSwapState(_buyParams);
     }
 
-    function calculateSwapState(BuyParams calldata _buyParams) public view returns(SwapState memory swapState) {
+    function calculateSwapState(
+        BuyParams calldata _buyParams
+    ) public view returns (SwapState memory swapState) {
         (swapState.priceRatioX96, ) = _slot0(_buyParams.pool);
 
         {
-            uint160 priceRatioLowerX96 = swapState.priceRatioX96 * _buyParams.lowerBoundSqrt / RATIO_SQRT_BASE;
-            uint160 priceRatioUpperX96 = swapState.priceRatioX96 * _buyParams.upperBoundSqrt / RATIO_SQRT_BASE;
+            uint160 priceRatioLowerX96 = (swapState.priceRatioX96 *
+                _buyParams.lowerBoundSqrt) / RATIO_SQRT_BASE;
+            uint160 priceRatioUpperX96 = (swapState.priceRatioX96 *
+                _buyParams.upperBoundSqrt) / RATIO_SQRT_BASE;
 
             int24 tickSpacing = IUniswapV3Pool(_buyParams.pool).tickSpacing();
 
@@ -120,8 +119,12 @@ contract RushBuy is
             swapState.tickUpper = _nearestTick(priceRatioUpperX96, tickSpacing);
         }
 
-        swapState.priceRatioLowerX96 = TickMath.getSqrtRatioAtTick(swapState.tickLower);
-        swapState.priceRatioUpperX96 = TickMath.getSqrtRatioAtTick(swapState.tickUpper);
+        swapState.priceRatioLowerX96 = TickMath.getSqrtRatioAtTick(
+            swapState.tickLower
+        );
+        swapState.priceRatioUpperX96 = TickMath.getSqrtRatioAtTick(
+            swapState.tickUpper
+        );
 
         uint256 balance0 = IERC20(_buyParams.token0).balanceOf(address(this));
         uint256 balance1 = IERC20(_buyParams.token1).balanceOf(address(this));
@@ -133,18 +136,23 @@ contract RushBuy is
         _updateTargetRX96(swapState);
 
         if (swapState.zeroForOne) {
-            if (_buyParams.slippageProtectionSqrt > RATIO_SQRT_BASE) revert PriceLimitTooBig();
+            if (_buyParams.slippageProtectionSqrt > RATIO_SQRT_BASE)
+                revert PriceLimitTooBig();
         } else {
-            if (_buyParams.slippageProtectionSqrt < RATIO_SQRT_BASE) revert PriceLimitTooSmall();
+            if (_buyParams.slippageProtectionSqrt < RATIO_SQRT_BASE)
+                revert PriceLimitTooSmall();
         }
 
         _updateSwapAmount(swapState, _buyParams, balance0, balance1);
     }
 
-    function buy(
-        BuyParams calldata _params
-    ) external onlyOwner {
-        if (position.liquidity != 0) revert HasPosition(position.pool, position.tickLower, position.tickUpper);
+    function buy(BuyParams calldata _params) external onlyOwner {
+        if (position.liquidity != 0)
+            revert HasPosition(
+                position.pool,
+                position.tickLower,
+                position.tickUpper
+            );
 
         SwapState memory swapState = calculateSwapState(_params);
 
@@ -162,14 +170,20 @@ contract RushBuy is
         int256 amount1;
 
         if (swap.zeroForOne) {
-            IERC20(_params.token0).approve(address(swapUtil), uint256(swapState.amountIn));
+            IERC20(_params.token0).approve(
+                address(swapUtil),
+                uint256(swapState.amountIn)
+            );
             (amount0, amount1) = swapUtil.swap(
                 _params.pool,
                 _params.token0,
                 swap
             );
         } else {
-            IERC20(_params.token1).approve(address(swapUtil), uint256(swapState.amountIn));
+            IERC20(_params.token1).approve(
+                address(swapUtil),
+                uint256(swapState.amountIn)
+            );
             (amount0, amount1) = swapUtil.swap(
                 _params.pool,
                 _params.token1,
@@ -178,7 +192,6 @@ contract RushBuy is
         }
 
         _addLiquidity(IUniswapV3Pool(_params.pool), swapState, _params);
-
     }
 
     function closePosition() external onlyOwner {
@@ -200,7 +213,7 @@ contract RushBuy is
         position.liquidity = 0;
     }
 
-    function withdraw(address _token) external onlyOwner() {
+    function withdraw(address _token) external onlyOwner {
         uint256 balance = IERC20(_token).balanceOf(address(this));
         IERC20(_token).transfer(msg.sender, balance);
     }
@@ -247,15 +260,26 @@ contract RushBuy is
         newImplementation; // silence the warning
     }
 
-    function _updateSwapAmount(SwapState memory _swapState, BuyParams calldata _buyParams, uint256 _amount0, uint256 _amount1) internal pure {
+    function _updateSwapAmount(
+        SwapState memory _swapState,
+        BuyParams calldata _buyParams,
+        uint256 _amount0,
+        uint256 _amount1
+    ) internal pure {
         uint256 num1 = _amount1 * _swapState.rX96;
         uint256 num2 = _amount0 * Q96;
 
-        _swapState.priceLimitSqrtX96 = _swapState.priceRatioX96 * _buyParams.slippageProtectionSqrt / RATIO_SQRT_BASE;
-        uint256 priceX96 = _calculatePrice(_swapState.priceLimitSqrtX96, _buyParams.decimal0, _buyParams.decimal1);
+        _swapState.priceLimitSqrtX96 =
+            (_swapState.priceRatioX96 * _buyParams.slippageProtectionSqrt) /
+            RATIO_SQRT_BASE;
+        uint256 priceX96 = _calculatePrice(
+            _swapState.priceLimitSqrtX96,
+            _buyParams.decimal0,
+            _buyParams.decimal1
+        );
 
         // uint256 den = Q96 + FullMath.mulDiv(priceX96, _swapState.rX96, Q96);
-        uint256 den = Q96 + priceX96 * _swapState.rX96 / Q96;
+        uint256 den = Q96 + (priceX96 * _swapState.rX96) / Q96;
 
         uint256 delta0;
         if (_swapState.zeroForOne) {
@@ -282,7 +306,11 @@ contract RushBuy is
         _swapState.priceLimitX96 = priceX96;
     }
 
-    function _calculatePrice(uint256 _priceLimitSqrtX96, uint8 decimal0, uint8 decimal1) internal pure returns(uint256 priceX96) {
+    function _calculatePrice(
+        uint256 _priceLimitSqrtX96,
+        uint8 decimal0,
+        uint8 decimal1
+    ) internal pure returns (uint256 priceX96) {
         priceX96 = FullMath.mulDiv(_priceLimitSqrtX96, _priceLimitSqrtX96, Q96);
 
         if (decimal0 > decimal1) {
@@ -293,14 +321,29 @@ contract RushBuy is
     }
 
     function _updateTargetRX96(SwapState memory _swapState) internal pure {
-        uint256 targetToken0 = SqrtPriceMath.getAmount0Delta(_swapState.priceRatioX96, _swapState.priceRatioUpperX96, ONE_ETHER, true);
-        uint256 targetToken1 = SqrtPriceMath.getAmount1Delta(_swapState.priceRatioLowerX96, _swapState.priceRatioX96, ONE_ETHER, true);
+        uint256 targetToken0 = SqrtPriceMath.getAmount0Delta(
+            _swapState.priceRatioX96,
+            _swapState.priceRatioUpperX96,
+            ONE_ETHER,
+            true
+        );
+        uint256 targetToken1 = SqrtPriceMath.getAmount1Delta(
+            _swapState.priceRatioLowerX96,
+            _swapState.priceRatioX96,
+            ONE_ETHER,
+            true
+        );
         _swapState.rX96 = FullMath.mulDiv(Q96, targetToken0, targetToken1);
     }
 
     /// In favour of wider tick if tick is negative, narrower tick if tick is positive
-    function _nearestTick(uint160 _ratioSqrt, int24 _tickSpacing) internal pure returns(int24) {
-        return TickMath.getTickAtSqrtRatio(_ratioSqrt) / _tickSpacing * _tickSpacing;
+    function _nearestTick(
+        uint160 _ratioSqrt,
+        int24 _tickSpacing
+    ) internal pure returns (int24) {
+        return
+            (TickMath.getTickAtSqrtRatio(_ratioSqrt) / _tickSpacing) *
+            _tickSpacing;
     }
 
     function _slot0(
@@ -336,9 +379,14 @@ contract RushBuy is
         bytes memory m = abi.encode(_buyParams.token0, _buyParams.token1);
 
         try
-            _pool.mint(address(this), _swapState.tickLower, _swapState.tickUpper, liquidity, m)
-        returns (uint256, uint256) {
-        } catch (bytes memory reason) {
+            _pool.mint(
+                address(this),
+                _swapState.tickLower,
+                _swapState.tickUpper,
+                liquidity,
+                m
+            )
+        returns (uint256, uint256) {} catch (bytes memory reason) {
             revert UniswapCallFailed("am", reason);
         }
 

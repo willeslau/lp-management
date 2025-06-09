@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.0;
 
-
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {TickMath} from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 
@@ -13,12 +12,20 @@ import {UniswapV3LpManagerAdmin} from "./UniswapV3LpManagerAdmin.sol";
 import {LiquidityChangeOutput} from "../interfaces/IUniswapV3PoolProxy.sol";
 import {UniswapV3PoolsUtilV2, PoolAddresses, Position} from "../UniswapV3PoolsUtilV2.sol";
 
+import {ISwapUtil} from "../SwapUtil.sol";
+
 library LibPoolAddresses {
-    function balance0(PoolAddresses memory self, address _who) internal view returns (uint256) {
+    function balance0(
+        PoolAddresses memory self,
+        address _who
+    ) internal view returns (uint256) {
         return IERC20(self.token0).balanceOf(_who);
     }
 
-    function balance1(PoolAddresses memory self, address _who) internal view returns (uint256) {
+    function balance1(
+        PoolAddresses memory self,
+        address _who
+    ) internal view returns (uint256) {
         return IERC20(self.token1).balanceOf(_who);
     }
 }
@@ -38,8 +45,21 @@ contract UniswapV3LpManagerV3 is
 
     mapping(address => Position) public positions;
 
-    event PositionOpen(address pool, int24 tickLower, uint160 priceSqrt, int24 tickUpper, uint256 amount0, uint256 amount1);
-    event PostionClosed(address pool, int24 tickLower, int24 tickUpper, uint128 amount0, uint128 amount1);
+    event PositionOpen(
+        address pool,
+        int24 tickLower,
+        uint160 priceSqrt,
+        int24 tickUpper,
+        uint256 amount0,
+        uint256 amount1
+    );
+    event PostionClosed(
+        address pool,
+        int24 tickLower,
+        int24 tickUpper,
+        uint128 amount0,
+        uint128 amount1
+    );
 
     error StillInRange();
 
@@ -58,26 +78,52 @@ contract UniswapV3LpManagerV3 is
         balancer = _balancer;
     }
 
-    function getPoolPositionInfo(address _pool) external view returns(Position memory pos, bool inRange) {
+    function getPoolPositionInfo(
+        address _pool
+    ) external view returns (Position memory pos, bool inRange) {
         pos = positions[_pool];
         inRange = isPositionInRange(_pool, pos);
     }
 
-    function rebalance(address _pool, uint160 _rangeNumerator) external onlyAddress(balancer) {
+    function rebalance(
+        address _pool,
+        uint160 _rangeNumerator
+    ) external onlyAddress(balancer) {
         Position memory position = positions[_pool];
         if (position.liquidity == 0) {
-            createPosition(_pool, _rangeNumerator);
+            _createPosition(_pool, _rangeNumerator);
         } else {
             processCurrentPosition(_pool, position, _rangeNumerator);
         }
     }
 
-    function closePosition(address _pool, Position memory _position) public onlyAddress(balancer) {
+    function closePosition(
+        address _pool,
+        Position memory _position
+    ) public onlyAddress(balancer) {
+        _closePosition(_pool, _position);
+    }
+
+    function withdraw(address _token) external onlyOwner {
+        uint256 balance = IERC20(_token).balanceOf(address(this));
+        IERC20(_token).transfer(liquidityOwner, balance);
+    }
+
+    function withdraw(address _token, uint256 _amount) external onlyOwner {
+        IERC20(_token).transfer(liquidityOwner, _amount);
+    }
+
+    // ==================== Internal Methods ====================
+    function _closePosition(
+        address _pool,
+        Position memory _position
+    ) internal returns (uint128 amount0Collected, uint128 amount1Collected) {
         IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
-        collectFees(pool, _position);
         _burnAll(pool, _position);
-        (uint128 amount0Collected, uint128 amount1Collected) = _collect(
+
+        // do not withdraw the fee, compound it
+        (amount0Collected, amount1Collected) = _collect(
             pool,
             address(this),
             _position,
@@ -87,83 +133,140 @@ contract UniswapV3LpManagerV3 is
 
         delete positions[_pool];
 
-        emit PostionClosed(_pool, _position.tickLower, _position.tickUpper, amount0Collected, amount1Collected);
+        emit PostionClosed(
+            _pool,
+            _position.tickLower,
+            _position.tickUpper,
+            amount0Collected,
+            amount1Collected
+        );
     }
 
-    function withdraw(address _token) external onlyOwner() {
-        uint256 balance = IERC20(_token).balanceOf(address(this));
-        IERC20(_token).transfer(liquidityOwner, balance);
-    }
-
-    function withdraw(address _token, uint256 _amount) external onlyOwner() {
-        IERC20(_token).transfer(liquidityOwner, _amount);
-    }
-
-    // ==================== Internal Methods ====================
-    function isPositionInRange(address _pool, Position memory _position) internal view returns (bool) {
+    function isPositionInRange(
+        address _pool,
+        Position memory _position
+    ) internal view returns (bool) {
         (, int24 currentTick) = _slot0(_pool);
-        return _position.tickLower <= currentTick && currentTick <= _position.tickUpper;
+        return
+            _position.tickLower <= currentTick &&
+            currentTick <= _position.tickUpper;
     }
 
-    function processCurrentPosition(address _pool, Position memory _position, uint160 _rangeNumerator) internal {
+    function processCurrentPosition(
+        address _pool,
+        Position memory _position,
+        uint160 _rangeNumerator
+    ) internal {
         (, int24 currentTick) = _slot0(_pool);
-        if (_position.tickLower <= currentTick && currentTick <= _position.tickUpper) {
+        if (
+            _position.tickLower <= currentTick &&
+            currentTick <= _position.tickUpper
+        ) {
             revert StillInRange();
         }
 
-        closePosition(_pool, _position);
-        createPosition(_pool, _rangeNumerator);
+        _closePosition(_pool, _position);
+        _createPosition(_pool, _rangeNumerator);
     }
 
-    function getPoolAddresses(address _pool) internal view returns (PoolAddresses memory poolAddresses) {
+    function getPoolAddresses(
+        address _pool
+    ) internal view returns (PoolAddresses memory poolAddresses) {
         poolAddresses.token0 = IUniswapV3Pool(_pool).token0();
         poolAddresses.token1 = IUniswapV3Pool(_pool).token1();
     }
 
-    function createPosition(address _pool, uint160 _rangeNumerator) internal {
+    function _createPosition(address _pool, uint160 _rangeNumerator) internal {
         PoolAddresses memory addresses = getPoolAddresses(_pool);
         uint256 token0Balance = addresses.balance0(address(this));
         uint256 token1Balance = addresses.balance1(address(this));
 
-        if (token0Balance == 0) { return addPositionToken1(_pool, addresses, token1Balance, _rangeNumerator); }
-        if (token1Balance == 0) { return addPositionToken0(_pool, addresses, token0Balance, _rangeNumerator); }
-        else {
-            revert ("Not supported now");
+        if (token0Balance == 0) {
+            return
+                addPositionToken1(
+                    _pool,
+                    addresses,
+                    token1Balance,
+                    _rangeNumerator
+                );
+        }
+        if (token1Balance == 0) {
+            return
+                addPositionToken0(
+                    _pool,
+                    addresses,
+                    token0Balance,
+                    _rangeNumerator
+                );
+        } else {
+            revert("Not supported now");
         }
     }
 
-    // function floorTick(int24 targetTick, int24 tickSpacing) public pure returns (int24) {
-    //     int24 remainder = targetTick % tickSpacing;
-        
-    //     int24 tick = targetTick - remainder;
+    function _floorTick(
+        int24 _targetTick,
+        int24 _tickSpacing
+    ) internal pure returns (int24) {
+        int24 remainder = _targetTick % _tickSpacing;
+        if (remainder == 0) return _targetTick;
 
-    //     if (targetTick < 0 && remainder != 0) {
-    //         tick -= tickSpacing;
-    //     }
+        if (_targetTick > 0) return _targetTick - remainder;
 
-    //     return tick;
-    // }
+        // solidity handling remainder of negative number is sign * (abs(num) % v)
+        return _targetTick - remainder - _tickSpacing;
+    }
 
-    // function ceilTick(int24 targetTick, int24 tickSpacing) public pure returns (int24) {
-    //     int24 remainder = targetTick % tickSpacing;
-    //     if (remainder == 0) {
-    //         return targetTick; // already aligned
-    //     }
+    function _ceilTick(
+        int24 _targetTick,
+        int24 _tickSpacing
+    ) internal pure returns (int24) {
+        int24 remainder = _targetTick % _tickSpacing;
+        if (remainder == 0) return _targetTick;
 
-    //     int24 tick = targetTick - remainder;
+        // if (_targetTick > 0) return
+        // solidity handling remainder of negative number is sign * (abs(num) % v)
+        return _targetTick - remainder;
+    }
 
-    //     if (targetTick > 0) {
-    //         tick += tickSpacing;
-    //     }
-    //     return tick;
-    // }
+    /// @dev This means the lower and upper ticks are below the current tick. Caller should make sure
+    ///      targetLowerTick is smaller than curTick
+    function _skewedLowerRange(
+        int24 targetLowerTick,
+        int24 curTick,
+        int24 tickSpacing
+    ) internal pure returns (int24 lower, int24 upper) {
+        // we shift lower tick further away from current tick to be more conservative in the tick range
+        lower = _floorTick(targetLowerTick, tickSpacing);
+        upper = _floorTick(curTick - 1, tickSpacing);
+    }
 
-    function addPositionToken1(address _pool, PoolAddresses memory _addresses, uint256 amount1, uint160 _rangeNumerator) internal {
+    /// @dev This means the lower and upper ticks are above the current tick. Caller should make sure
+    ///      targetUpperTick is smaller than curTick
+    function _skewedUpperRange(
+        int24 targetUpperTick,
+        int24 curTick,
+        int24 tickSpacing
+    ) internal pure returns (int24 lower, int24 upper) {
+        // we shift upper tick further away from current tick to be more conservative in the tick range
+        upper = _ceilTick(targetUpperTick, tickSpacing);
+        lower = _ceilTick(curTick + 1, tickSpacing);
+    }
+
+    function addPositionToken1(
+        address _pool,
+        PoolAddresses memory _addresses,
+        uint256 amount1,
+        uint160 _rangeNumerator
+    ) internal {
         (uint160 priceSqrt, int24 currentTick) = _slot0(_pool);
 
-        uint160 priceSqrtLower = (RANGE_DENOMINATOR - _rangeNumerator) * priceSqrt / RANGE_DENOMINATOR;
-        int24 tickLower = TickMath.getTickAtSqrtRatio(priceSqrtLower);
-        int24 tickUpper = currentTick - 1;
+        uint160 priceSqrtLower = ((RANGE_DENOMINATOR - _rangeNumerator) *
+            priceSqrt) / RANGE_DENOMINATOR;
+        (int24 tickLower, int24 tickUpper) = _skewedLowerRange(
+            TickMath.getTickAtSqrtRatio(priceSqrtLower),
+            currentTick,
+            IUniswapV3Pool(_pool).tickSpacing()
+        );
 
         LiquidityChangeOutput memory output = _addLiquidity(
             _pool,
@@ -179,15 +282,31 @@ contract UniswapV3LpManagerV3 is
         positions[_pool].tickUpper = tickUpper;
         positions[_pool].liquidity = output.liquidity;
 
-        emit PositionOpen(_pool, tickLower, priceSqrt, tickUpper, output.amount0, output.amount1);
+        emit PositionOpen(
+            _pool,
+            tickLower,
+            priceSqrt,
+            tickUpper,
+            output.amount0,
+            output.amount1
+        );
     }
 
-    function addPositionToken0(address _pool, PoolAddresses memory _addresses, uint256 amount0, uint160 _rangeNumerator) internal {
+    function addPositionToken0(
+        address _pool,
+        PoolAddresses memory _addresses,
+        uint256 amount0,
+        uint160 _rangeNumerator
+    ) internal {
         (uint160 priceSqrt, int24 currentTick) = _slot0(_pool);
 
-        uint160 priceSqrtLower = (RANGE_DENOMINATOR + _rangeNumerator) * priceSqrt / RANGE_DENOMINATOR;
-        int24 tickUpper = TickMath.getTickAtSqrtRatio(priceSqrtLower);
-        int24 tickLower = currentTick + 1;
+        uint160 priceSqrtUpper = ((RANGE_DENOMINATOR + _rangeNumerator) *
+            priceSqrt) / RANGE_DENOMINATOR;
+        (int24 tickLower, int24 tickUpper) = _skewedUpperRange(
+            TickMath.getTickAtSqrtRatio(priceSqrtUpper),
+            currentTick,
+            IUniswapV3Pool(_pool).tickSpacing()
+        );
 
         LiquidityChangeOutput memory output = _addLiquidity(
             _pool,
@@ -203,7 +322,14 @@ contract UniswapV3LpManagerV3 is
         positions[_pool].tickUpper = tickUpper;
         positions[_pool].liquidity = output.liquidity;
 
-        emit PositionOpen(_pool, tickLower, priceSqrt, tickUpper, output.amount0, output.amount1);
+        emit PositionOpen(
+            _pool,
+            tickLower,
+            priceSqrt,
+            tickUpper,
+            output.amount0,
+            output.amount1
+        );
     }
 
     /**
@@ -213,14 +339,5 @@ contract UniswapV3LpManagerV3 is
         address newImplementation
     ) internal view override onlyOwner {
         newImplementation; // silence the warning
-    }
-
-    function collectFees(
-        IUniswapV3Pool _pool,
-        Position memory _position
-    ) internal {
-        _pool.burn(_position.tickLower, _position.tickUpper, 0);
-        (uint128 fee0, uint128 fee1) = _tokensOwned(_pool, _position);
-        _collect(_pool, liquidityOwner, _position, fee0, fee1);
     }
 }
