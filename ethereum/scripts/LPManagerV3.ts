@@ -12,6 +12,7 @@ const Q96 = 79228162514264337593543950336n;
 const Q96_JSBI = JSBI.BigInt(Q96.toString());
 
 const SECONDS_IN_A_YEAR = 365 * 24 * 60 * 60;
+const DEFAULT_LIQUIDITY_FOR_ESTIMATION = JSBI.BigInt("500000000000000000000000");
 
 export interface UniswapPoolInfo {
     token0: string,
@@ -68,8 +69,6 @@ export class LPManagerV3 {
 
     public async estimateAPR(
         pool: string, 
-        amount0: bigint, 
-        amount1: bigint,
         tickLower: number, 
         tickUpper: number, 
         secondsAgo: number, 
@@ -88,14 +87,7 @@ export class LPManagerV3 {
             return 0;
         }
 
-        const liquidity = maxLiquidityForAmounts(
-            sqrtPriceX96,
-            lowerSqrt,
-            upperSqrt,
-            JSBI.BigInt(amount0.toString()),
-            JSBI.BigInt(amount1.toString()),
-            true
-        );
+        const liquidity = DEFAULT_LIQUIDITY_FOR_ESTIMATION;
 
         const [fee0, fee1] = await this.getFeeGrowth(pool, liquidity, tickLower, tickUpper, secondsAgo, blockTime);
         let priceX96 = FullMath.mulDivRoundingUp(sqrtPriceX96, sqrtPriceX96, Q96_JSBI);
@@ -113,56 +105,7 @@ export class LPManagerV3 {
         // console.log("principle", principle.toString(), "fee", fee.toString());
     
         const multiplier = JSBI.BigInt(10000 * SECONDS_IN_A_YEAR / secondsAgo);
-        return Number(JSBI.divide(JSBI.multiply(fee, multiplier), principle)) / 10000;
-    }
-
-    public async estimateSingleSideAPR(
-        pool: string, 
-        amount0: bigint, 
-        amount1: bigint,
-        tickRange: number,
-        secondsAgo: number, 
-        blockTime: number,
-        decimals0: number,
-        decimals1: number,
-    ): Promise<number> {
-        const uniswapContract = await loadContractForQuery('IUniswapV3Pool', pool, this.contract.runner!);
-        const slot = await uniswapContract.slot0();
-
-        const sqrtPriceX96 = JSBI.BigInt(slot.sqrtPriceX96.toString());
-        const lowerSqrt = TickMath.getSqrtRatioAtTick(tickLower);
-        const upperSqrt = TickMath.getSqrtRatioAtTick(tickUpper);
-
-        if (sqrtPriceX96 < lowerSqrt || sqrtPriceX96 > upperSqrt) {
-            return 0;
-        }
-
-        const liquidity = maxLiquidityForAmounts(
-            sqrtPriceX96,
-            lowerSqrt,
-            upperSqrt,
-            JSBI.BigInt(amount0.toString()),
-            JSBI.BigInt(amount1.toString()),
-            true
-        );
-
-        const [fee0, fee1] = await this.getFeeGrowth(pool, liquidity, tickLower, tickUpper, secondsAgo, blockTime);
-        let priceX96 = FullMath.mulDivRoundingUp(sqrtPriceX96, sqrtPriceX96, Q96_JSBI);
-        priceX96 = JSBI.multiply(priceX96, JSBI.BigInt(Math.pow(10, decimals0 - decimals1)));
-
-        const fee0In1 = FullMath.mulDivRoundingUp(JSBI.BigInt(fee0.toString()), priceX96, Q96_JSBI);
-        const fee = JSBI.add(JSBI.BigInt(fee1.toString()), fee0In1);
-
-        const a0 = SqrtPriceMath.getAmount0Delta(sqrtPriceX96, upperSqrt, liquidity, false);
-        const a1 = SqrtPriceMath.getAmount1Delta(lowerSqrt, sqrtPriceX96, liquidity, false);
-
-        const principle0In1 = FullMath.mulDivRoundingUp(a0, priceX96, Q96_JSBI);
-        const principle = JSBI.add(principle0In1, a1);
-
-        // console.log("principle", principle.toString(), "fee", fee.toString());
-    
-        const multiplier = JSBI.BigInt(10000 * SECONDS_IN_A_YEAR / secondsAgo);
-        return Number(JSBI.divide(JSBI.multiply(fee, multiplier), principle)) / 10000;
+        return Number(JSBI.divide(JSBI.multiply(fee, multiplier), principle)) / 100;
     }
 
     async getFeeGrowthInside(
