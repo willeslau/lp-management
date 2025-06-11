@@ -1,12 +1,17 @@
-import { Contract, ContractRunner, Signer, solidityPackedKeccak256, ZeroAddress } from "ethers";
+import { Contract, ContractRunner, Signer, solidityPackedKeccak256 } from "ethers";
 import { loadContract, loadContractForQuery } from "./util";
-import { Pool, Position as UniswapPool, TickLibrary, FullMath } from '@uniswap/v3-sdk';
+import { Pool, Position as UniswapPool, TickLibrary, FullMath, maxLiquidityForAmounts, TickMath, SqrtPriceMath } from '@uniswap/v3-sdk';
 import JSBI from "jsbi";
 import { Token } from "@uniswap/sdk-core";
 
 const Q128 = 340282366920938463463374607431768211456n;
 const RANGE_DENOMINATOR = 100000;
 const Q128_JSBI = JSBI.BigInt(Q128.toString());
+
+const Q96 = 79228162514264337593543950336n;
+const Q96_JSBI = JSBI.BigInt(Q96.toString());
+
+const SECONDS_IN_A_YEAR = 365 * 24 * 60 * 60;
 
 export interface UniswapPoolInfo {
     token0: string,
@@ -52,7 +57,8 @@ export class LPManagerV3 {
 
     convertFeeToHumanReadble(feeRaw: bigint, liquidity: JSBI): JSBI {
         const feeConverted = JSBI.BigInt(feeRaw.toString());
-
+        console.log("feeConverted", feeConverted.toString());
+    
         return FullMath.mulDivRoundingUp(feeConverted, liquidity, Q128_JSBI);
     }
 
@@ -60,22 +66,156 @@ export class LPManagerV3 {
         return await this.uniswapUtil.getFeeGrowthInside(pool, tickLower, tickUpper);
     }
 
-    public async getFeeGrowth(pool: string, liquidity: BigInt, tickLower: number, tickUpper: number, secondsAgo: number, blockTime: number): Promise<[bigint, bigint]> {
-        const feeGrowthNow = await this.uniswapUtil.getFeeGrowthInside(pool, tickLower, tickUpper);
-        
+    public async estimateAPR(
+        pool: string, 
+        amount0: bigint, 
+        amount1: bigint,
+        tickLower: number, 
+        tickUpper: number, 
+        secondsAgo: number, 
+        blockTime: number,
+        decimals0: number,
+        decimals1: number,
+    ): Promise<number> {
+        const uniswapContract = await loadContractForQuery('IUniswapV3Pool', pool, this.contract.runner!);
+        const slot = await uniswapContract.slot0();
+
+        const sqrtPriceX96 = JSBI.BigInt(slot.sqrtPriceX96.toString());
+        const lowerSqrt = TickMath.getSqrtRatioAtTick(tickLower);
+        const upperSqrt = TickMath.getSqrtRatioAtTick(tickUpper);
+
+        if (sqrtPriceX96 < lowerSqrt || sqrtPriceX96 > upperSqrt) {
+            return 0;
+        }
+
+        const liquidity = maxLiquidityForAmounts(
+            sqrtPriceX96,
+            lowerSqrt,
+            upperSqrt,
+            JSBI.BigInt(amount0.toString()),
+            JSBI.BigInt(amount1.toString()),
+            true
+        );
+
+        const [fee0, fee1] = await this.getFeeGrowth(pool, liquidity, tickLower, tickUpper, secondsAgo, blockTime);
+        let priceX96 = FullMath.mulDivRoundingUp(sqrtPriceX96, sqrtPriceX96, Q96_JSBI);
+        priceX96 = JSBI.multiply(priceX96, JSBI.BigInt(Math.pow(10, decimals0 - decimals1)));
+
+        const fee0In1 = FullMath.mulDivRoundingUp(JSBI.BigInt(fee0.toString()), priceX96, Q96_JSBI);
+        const fee = JSBI.add(JSBI.BigInt(fee1.toString()), fee0In1);
+
+        const a0 = SqrtPriceMath.getAmount0Delta(sqrtPriceX96, upperSqrt, liquidity, false);
+        const a1 = SqrtPriceMath.getAmount1Delta(lowerSqrt, sqrtPriceX96, liquidity, false);
+
+        const principle0In1 = FullMath.mulDivRoundingUp(a0, priceX96, Q96_JSBI);
+        const principle = JSBI.add(principle0In1, a1);
+
+        // console.log("principle", principle.toString(), "fee", fee.toString());
+    
+        const multiplier = JSBI.BigInt(10000 * SECONDS_IN_A_YEAR / secondsAgo);
+        return Number(JSBI.divide(JSBI.multiply(fee, multiplier), principle)) / 10000;
+    }
+
+    public async estimateSingleSideAPR(
+        pool: string, 
+        amount0: bigint, 
+        amount1: bigint,
+        tickRange: number,
+        secondsAgo: number, 
+        blockTime: number,
+        decimals0: number,
+        decimals1: number,
+    ): Promise<number> {
+        const uniswapContract = await loadContractForQuery('IUniswapV3Pool', pool, this.contract.runner!);
+        const slot = await uniswapContract.slot0();
+
+        const sqrtPriceX96 = JSBI.BigInt(slot.sqrtPriceX96.toString());
+        const lowerSqrt = TickMath.getSqrtRatioAtTick(tickLower);
+        const upperSqrt = TickMath.getSqrtRatioAtTick(tickUpper);
+
+        if (sqrtPriceX96 < lowerSqrt || sqrtPriceX96 > upperSqrt) {
+            return 0;
+        }
+
+        const liquidity = maxLiquidityForAmounts(
+            sqrtPriceX96,
+            lowerSqrt,
+            upperSqrt,
+            JSBI.BigInt(amount0.toString()),
+            JSBI.BigInt(amount1.toString()),
+            true
+        );
+
+        const [fee0, fee1] = await this.getFeeGrowth(pool, liquidity, tickLower, tickUpper, secondsAgo, blockTime);
+        let priceX96 = FullMath.mulDivRoundingUp(sqrtPriceX96, sqrtPriceX96, Q96_JSBI);
+        priceX96 = JSBI.multiply(priceX96, JSBI.BigInt(Math.pow(10, decimals0 - decimals1)));
+
+        const fee0In1 = FullMath.mulDivRoundingUp(JSBI.BigInt(fee0.toString()), priceX96, Q96_JSBI);
+        const fee = JSBI.add(JSBI.BigInt(fee1.toString()), fee0In1);
+
+        const a0 = SqrtPriceMath.getAmount0Delta(sqrtPriceX96, upperSqrt, liquidity, false);
+        const a1 = SqrtPriceMath.getAmount1Delta(lowerSqrt, sqrtPriceX96, liquidity, false);
+
+        const principle0In1 = FullMath.mulDivRoundingUp(a0, priceX96, Q96_JSBI);
+        const principle = JSBI.add(principle0In1, a1);
+
+        // console.log("principle", principle.toString(), "fee", fee.toString());
+    
+        const multiplier = JSBI.BigInt(10000 * SECONDS_IN_A_YEAR / secondsAgo);
+        return Number(JSBI.divide(JSBI.multiply(fee, multiplier), principle)) / 10000;
+    }
+
+    async getFeeGrowthInside(
+        pool: string,
+        tickLower: number,
+        tickUpper: number,
+        secondsAgo: number,
+        blockTime: number
+    ) {
         const latestBlockNumber = await this.contract.runner!.provider?.getBlockNumber();
         const blocks = Math.floor(secondsAgo / blockTime);
         const historyBlock = latestBlockNumber! - blocks;
 
-        const feeGrowthBefore = await this.uniswapUtil.getFeeGrowthInside(pool, tickLower, tickUpper, {blockTag: historyBlock});
+        const uniswapContract = await loadContractForQuery('IUniswapV3Pool', pool, this.contract.runner!);
+        const slot = await uniswapContract.slot0({blockTag: historyBlock});
 
-        console.log("now vs before", feeGrowthNow, feeGrowthBefore);
+        const tickCurrent = slot.tick;
+        // console.log(historyBlock, "latestBlockNumber", latestBlockNumber, tickCurrent);
 
-        const liquidityJSBI = JSBI.BigInt(liquidity.toString());
-        const fee0Growth = this.convertFeeToHumanReadble(BigInt(feeGrowthNow[0] - feeGrowthBefore[0]), liquidityJSBI);
-        const fee1Growth = this.convertFeeToHumanReadble(BigInt(feeGrowthNow[1] - feeGrowthBefore[1]), liquidityJSBI);
+        const tickLowerInfo = await uniswapContract.ticks(tickLower, {blockTag: historyBlock});
+        const tickUpperInfo = await uniswapContract.ticks(tickUpper, {blockTag: historyBlock});
 
-        return [BigInt(fee0Growth.toString()), BigInt(fee1Growth.toString())];
+        const [fee0Rate, fee1Rate] = TickLibrary.getFeeGrowthInside(
+            {
+                feeGrowthOutside0X128: JSBI.BigInt(tickLowerInfo.feeGrowthOutside0X128.toString()),
+                feeGrowthOutside1X128: JSBI.BigInt(tickLowerInfo.feeGrowthOutside1X128.toString())
+            },
+            {
+                feeGrowthOutside0X128: JSBI.BigInt(tickUpperInfo.feeGrowthOutside0X128.toString()),
+                feeGrowthOutside1X128: JSBI.BigInt(tickUpperInfo.feeGrowthOutside1X128.toString())
+            },
+            Number(tickLower),
+            Number(tickUpper),
+            Number(tickCurrent),
+            JSBI.BigInt((await uniswapContract.feeGrowthGlobal0X128({blockTag: historyBlock})).toString()),
+            JSBI.BigInt((await uniswapContract.feeGrowthGlobal1X128({blockTag: historyBlock})).toString()),
+        );
+        return [
+            fee0Rate,
+            fee1Rate
+        ];
+    }
+
+    public async getFeeGrowth(pool: string, liquidity: JSBI, tickLower: number, tickUpper: number, secondsAgo: number, blockTime: number): Promise<[BigInt, BigInt]> {
+        const feeGrowthNow = await this.getFeeGrowthInside(pool, tickLower, tickUpper, 0, blockTime);
+        const feeGrowthBefore = await this.getFeeGrowthInside(pool, tickLower, tickUpper, secondsAgo, blockTime);
+
+        const fee0Growth = this.calculateFee(BigInt(feeGrowthNow[0].toString()), BigInt(feeGrowthBefore[0].toString()), BigInt(liquidity.toString()));
+        const fee1Growth = this.calculateFee(BigInt(feeGrowthNow[1].toString()), BigInt(feeGrowthBefore[1].toString()), BigInt(liquidity.toString()));
+
+        // console.log("now vs before", fee0Growth.toString(), fee1Growth.toString());
+
+        return [fee0Growth, fee1Growth];
     }
 
     public async getPosition(pool: string): Promise<Position> {
@@ -120,29 +260,6 @@ export class LPManagerV3 {
     public async withdrawAmount(token: string, amount: bigint): Promise<void> {
         await this.contract['withdraw(address,uint256)'](token, amount);
     }
-
-    // private parsePositionChangedLog(logs: any[]): VaultPositionChangedEvent | null {
-    //     for (const log of logs) {
-    //         try {
-    //           const parsed = this.contract.interface.parseLog(log)!;
-    //           if (parsed.name === "VaultPositionChanged") {
-    //             const { liquidityOwner, vaultId, change, amount0, amount1 } = parsed.args;
-        
-    //             return {
-    //               liquidityOwner,
-    //               vaultId: Number(vaultId),
-    //               change: change as PositionChange,
-    //               amount0: BigInt(amount0.toString()),
-    //               amount1: BigInt(amount1.toString()),
-    //             };
-    //           }
-    //         } catch {
-    //           // Skip logs that don't match the interface
-    //         }
-    //     }
-        
-    //     return null; // No matching event found
-    // }
 
     public async address(): Promise<string> {
         return await this.contract.getAddress();

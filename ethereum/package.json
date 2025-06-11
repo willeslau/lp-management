@@ -43,6 +43,7 @@
     "lpManagerV3::closePosition": "npx hardhat run scripts/lpManagerV3/closePosition.ts --network ${NETWORK}",
     "lpManagerV3::withdraw": "npx hardhat run scripts/lpManagerV3/withdraw.ts --network ${NETWORK}",
     "lpManagerV3::checkFee": "npx hardhat run scripts/lpManagerV3/checkFee.ts --network ${NETWORK}",
+    "lpManagerV3::impermanentLoss": "npx hardhat run scripts/lpManagerV3/impermanentLoss.ts --network ${NETWORK}",
 
     "supportedToken::deploy": "npx hardhat run scripts/supportedTokens/deploy.ts --network ${NETWORK}",
     "supportedToken::addTokenPair": "npx hardhat run scripts/supportedTokens/addTokenPair.ts --network ${NETWORK}",

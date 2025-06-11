@@ -3,9 +3,13 @@ import { lpManagerFromNetwork } from './config';
 import { delay } from '../util';
 
 const pool = "0x172fcD41E0913e95784454622d1c3724f546f849";
-const tickLower = -65250;
-const tickUpper = -65221;
-const liquidity = 264334356510589449931417n;
+const tickLower = -65105;
+const tickUpper = -65091;
+
+const amount0 = ethers.parseEther("1000");
+const amount1 = ethers.parseEther("10");
+const decimals0 = 18;
+const decimals1 = 18;
 
 async function main() {
   try {
@@ -20,11 +24,10 @@ async function main() {
 
     while(true) {
       // const feeGrowthNow = await lpManager.getFeeGrowthNow(pool, tickLower, tickUpper);
-      const feeGrowthWindow = await lpManager.getFeeGrowth(pool, liquidity, tickLower, tickUpper, 60, 1.5);
-      console.log(
-        Number(feeGrowthWindow[0]) / Number(ethers.parseEther("1")),
-        Number(feeGrowthWindow[1]) / Number(ethers.parseEther("1")),
-      );
+      // const feeGrowthWindow = await lpManager.getFeeGrowth(pool, liquidity, tickLower, tickUpper, 60, 1.5);
+
+      const estimatedApr = await lpManager.estimateAPR(pool, amount0, amount1, tickLower, tickUpper, 100, 1.5, decimals0, decimals1);
+      console.log(estimatedApr);
       await delay(3000);
     }
 
