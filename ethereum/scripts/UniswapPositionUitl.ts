@@ -72,6 +72,11 @@ export class UniswapV3PoolUtil {
         return new UniswapV3PoolUtil(contract, token0, token1, feeTier);
     }
 
+    public async poolTick(): Promise<number> {
+        const slot = await this.contract.slot0();
+        return Number(slot.tick);
+    }
+
     public async getPositionFees(owner: string, tickLower: number, tickUpper: number): Promise<Monitor> {
         const slot = await this.contract.slot0();
 
@@ -170,7 +175,7 @@ export class UniswapV3PoolUtil {
         return results;
     }
 
-    public singleSideToken1Losses(
+    public singleSideToken1Summary(
         amount1: JSBI,
         tickLower: number,
         tickUpper: number,
@@ -220,7 +225,7 @@ export class UniswapV3PoolUtil {
         return results;
     }
 
-    public singleSideToken0Losses(
+    public singleSideToken0Summary(
         amount: JSBI,
         tickLower: number,
         tickUpper: number,
@@ -253,8 +258,7 @@ export class UniswapV3PoolUtil {
             const token0 = Number(position.amount0.toExact());
             const token1 = Number(position.amount1.toExact());
 
-            const lossToken1 = amountStart - token0 - token1 * Number(pool.token1Price.toSignificant(6)) / (1 + totalSwapLoss);
-            // const lossToken0 = lossToken1 * Number(pool.token1Price.toSignificant(6));
+            const lossToken0 = amountStart - token0 - token1 * Number(pool.token1Price.toSignificant(6)) / (1 + totalSwapLoss);
             results.push({
                 tick,
                 token0,
@@ -262,7 +266,7 @@ export class UniswapV3PoolUtil {
                 price0: pool.token0Price.toSignificant(5),
                 price1: pool.token1Price.toSignificant(6),
                 deltaToken0: amountStart - token0,
-                lossToken1,
+                lossToken0,
             });
         }
 

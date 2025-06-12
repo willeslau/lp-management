@@ -3,8 +3,8 @@ import { lpManagerFromNetwork } from './config';
 import { delay } from '../util';
 
 const pool = "0x172fcD41E0913e95784454622d1c3724f546f849";
-const tickLower = -65105;
-const tickUpper = -65014;
+const tickLower = -64957;
+const tickUpper = -65061;
 
 const decimals0 = 18;
 const decimals1 = 18;
