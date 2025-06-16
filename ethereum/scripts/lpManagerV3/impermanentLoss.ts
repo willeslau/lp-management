@@ -2,12 +2,20 @@ import { UniswapV3PoolUtil } from '../UniswapPositionUitl';
 import { ethers } from 'hardhat';
 import JSBI from 'jsbi';
 
+// all in one: 40210.25771302155
+// wait:
+//.   pos 1: 12560.28299019196
+//.   pos 2: 14996.771309517306
+//.   pos 3: 12620.438152550672
 const pool = "0x172fcD41E0913e95784454622d1c3724f546f849";
 const chainId = 56;
 
-const amount = JSBI.BigInt(ethers.parseEther("30000").toString());
-const tickLower = -65064;
-const tickUpper = -65000;
+// 3405
+
+//
+const amount = JSBI.BigInt(ethers.parseEther("5.714").toString());
+const tickLower = -64879;
+const tickUpper = -64803;
 
 const swapSlippage = 0.0003;
 const feeRate = 0.0001;
@@ -26,17 +34,16 @@ async function main() {
     //   tickUpper,
     // );
 
-    const loss = position.singleSideToken0Summary(
+    const loss = position.singleSideToken1Summary(
       amount,
       tickLower,
-      tickUpper,
-      totalSwapLoss
+      tickUpper
     );
 
-    // const apr = await position.estimateSingleSideToken0APR(amount, tickLower, tickUpper, 120, 1.5, 18, 18);
+    const apr = await position.estimateSingleSideToken1APR(amount, tickLower, 120, 1.5, 18, 18);
 
-    console.table(loss);
-    // console.log(apr);
+    console.table(loss[0]);
+    console.log(apr);
 
   } catch (error) {
     console.error(error);

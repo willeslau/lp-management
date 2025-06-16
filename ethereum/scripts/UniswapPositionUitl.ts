@@ -1,8 +1,8 @@
 import { assert, Contract, ContractRunner, Provider, Signer, solidityPackedKeccak256 } from "ethers";
 import { loadContract, loadContractForQuery } from "./util";
-import { Pool, Position, TickLibrary, FullMath, maxLiquidityForAmounts, TickMath, SqrtPriceMath } from '@uniswap/v3-sdk';
+import { Pool, Position, TickLibrary, FullMath, maxLiquidityForAmounts, TickMath, SqrtPriceMath, tickToPrice, priceToClosestTick } from '@uniswap/v3-sdk';
 import JSBI from "jsbi";
-import { CurrencyAmount, Token } from "@uniswap/sdk-core";
+import { CurrencyAmount, Fraction, Price, Token } from "@uniswap/sdk-core";
 
 const Q128 = 340282366920938463463374607431768211456n;
 
@@ -62,7 +62,7 @@ export class UniswapV3PoolUtil {
         const token1Address = await contract.token1();
 
         const [token1Name, token1Decimals] = await UniswapV3PoolUtil.tokenMetadata(token1Address, provider);
-        const [token0Name, token0Decimals] = await UniswapV3PoolUtil.tokenMetadata(token1Address, provider);
+        const [token0Name, token0Decimals] = await UniswapV3PoolUtil.tokenMetadata(token0Address, provider);
 
         const token0 = new Token(chainId, token0Address, token0Decimals, token0Name, token0Name);
         const token1 = new Token(chainId, token1Address, token1Decimals, token1Name, token1Name);
@@ -139,6 +139,59 @@ export class UniswapV3PoolUtil {
         }
     }
 
+    public liquidity(
+        amount0: JSBI,
+        amount1: JSBI,
+        openPositionTick: number,
+        tickLower: number,
+        tickUpper: number,
+    ): JSBI {
+        return maxLiquidityForAmounts(
+            TickMath.getSqrtRatioAtTick(openPositionTick),
+            TickMath.getSqrtRatioAtTick(tickLower),
+            TickMath.getSqrtRatioAtTick(tickUpper),
+            amount0,
+            amount1,
+            true
+        );
+    }
+
+    public balancesAtTickFromLiquidity(
+        liquidity: JSBI,
+        tickLower: number,
+        tickUpper: number,
+        currentTick: number,
+    ): [CurrencyAmount<Token>, CurrencyAmount<Token>] {
+        const inRangeLiquidity = 0; // should not matter this calculating the position amounts
+
+        const pool = new Pool(this.token0, this.token1, this.feeTier,  TickMath.getSqrtRatioAtTick(currentTick), inRangeLiquidity, currentTick);
+        const position = new Position({ pool, liquidity, tickLower, tickUpper });
+        const token0 = position.amount0;
+        const token1 = position.amount1;
+
+        return [token0, token1];
+    }
+
+    public balancesAtTickFromAmounts(
+        amount0: JSBI,
+        amount1: JSBI,
+        openPositionTick: number,
+        tickLower: number,
+        tickUpper: number,
+        currentTick: number,
+    ): [CurrencyAmount<Token>, CurrencyAmount<Token>] {
+        const liquidity = maxLiquidityForAmounts(
+            TickMath.getSqrtRatioAtTick(openPositionTick),
+            TickMath.getSqrtRatioAtTick(tickLower),
+            TickMath.getSqrtRatioAtTick(tickUpper),
+            amount0.toString(),
+            amount1.toString(),
+            true
+        );
+
+        return this.balancesAtTickFromLiquidity(liquidity, tickLower, tickUpper, currentTick);
+    }
+
     public balances(
         amount0: JSBI,
         amount1: JSBI,
@@ -179,7 +232,6 @@ export class UniswapV3PoolUtil {
         amount1: JSBI,
         tickLower: number,
         tickUpper: number,
-        totalSwapLoss: number,
     ): Loss[] {
         const inRangeLiquidity = 0; // should not matter this calculating the position amounts
 
@@ -208,7 +260,7 @@ export class UniswapV3PoolUtil {
             const token0 = Number(position.amount0.toExact());
             const token1 = Number(position.amount1.toExact());
 
-            const lossToken1 = (amount1Start - token1) - token0 / ((1 + totalSwapLoss) * Number(pool.token1Price.toSignificant(6)));
+            const lossToken1 = (amount1Start - token1) - token0 / Number(pool.token1Price.toSignificant(6));
             const lossToken0 = lossToken1 * Number(pool.token1Price.toSignificant(6));
             results.push({
                 tick,
@@ -273,10 +325,81 @@ export class UniswapV3PoolUtil {
         return results;
     }
 
-    public async estimateSingleSideToken0APR(
+    public async singleSideNarrowBandToken1Analysis(
         amount: JSBI,
-        tickLower: number, 
-        tickUpper: number, 
+        priceRange: Fraction,
+        secondsAgo: number, 
+        blockTime: number,
+        durationSeconds: number,
+        decimals0: number,
+        decimals1: number,
+    ): Promise<[number, number]> {
+        if(priceRange.greaterThan(1)) {
+            throw Error(`invalid range ${priceRange.toFixed(10)}`);
+        }
+
+        const slot = await this.contract.slot0();
+        const tick = Number(slot.tick);
+        const sqrtPriceX96 = JSBI.BigInt(slot.sqrtPriceX96.toString());
+
+        const priceCurrent = tickToPrice(this.token0, this.token1, tick);
+
+        // the price is token 0 to token 1, so higher token 1 price is actually lower token 0 price
+        const priceLower = new Price(
+            this.token0,
+            this.token1,
+            JSBI.multiply(priceCurrent.denominator, priceRange.denominator),
+            JSBI.multiply(priceCurrent.numerator, JSBI.subtract(priceRange.denominator, priceRange.numerator)),
+        );
+
+        // invert the price as we are calculating based on 
+        const tickLower = priceToClosestTick(priceLower);
+
+        // need to deduct 1 because we do not have any token 0
+        const openPositionUpperTick = tick - 1;
+
+        console.log(priceCurrent.invert().toFixed(10), priceLower.invert().toFixed(10), tickLower, openPositionUpperTick, tick);
+
+        const position0Only = Position.fromAmounts({
+            pool: new Pool(this.token0, this.token1, this.feeTier, sqrtPriceX96.toString(), JSBI.BigInt(0), tick),
+            tickLower,
+            tickUpper: openPositionUpperTick,
+            amount0: 0, // token0 is 0 → single-sided
+            amount1: amount,
+            useFullPrecision: true,
+        });
+
+        console.log(position0Only.amount1.toExact(), position0Only.amount0.toExact(), position0Only.liquidity.toString());
+
+        const liquidity = position0Only.liquidity;
+
+        // now estimate fee
+        const estimateTickUpper = tick; // use current tick so that the range will not be 0
+        const [fee0, fee1] = await this.getFeeGrowth(liquidity, tickLower, estimateTickUpper, secondsAgo, blockTime);
+
+        const fee1In0 = Number(priceLower.invert().toFixed(10)) * Number(fee1) / Math.pow(10, this.token1.decimals);
+        const feeTotal = fee1In0 + Number(fee0) / Math.pow(10, this.token0.decimals);
+
+        const estimatedDurationFee = feeTotal * durationSeconds / secondsAgo;
+
+        console.log(fee0, fee1, fee1In0, estimatedDurationFee);
+
+        // now calculate impermanent loss
+        const priceSqrtLower = TickMath.getSqrtRatioAtTick(tickLower);
+        const positionLower = new Position({
+            pool: new Pool(this.token0, this.token1, this.feeTier, priceSqrtLower, JSBI.BigInt(0), tickLower),
+            tickLower,
+            tickUpper: openPositionUpperTick,
+            liquidity,
+        });
+        const loss = Number(priceLower.invert().toFixed(10)) * Number(amount) / Math.pow(10, this.token0.decimals) - Number(positionLower.amount0.toExact());
+        console.log(loss);
+        return [0, 0];
+    }
+
+    public async estimateSingleSideToken1APR(
+        amount: JSBI,
+        tickLower: number,
         secondsAgo: number, 
         blockTime: number,
         decimals0: number,
@@ -285,12 +408,9 @@ export class UniswapV3PoolUtil {
         const slot = await this.contract.slot0();
 
         const sqrtPriceX96 = JSBI.BigInt(slot.sqrtPriceX96.toString());
+        const tickUpper = Number(slot.tick) - 1;
         const lowerSqrt = TickMath.getSqrtRatioAtTick(tickLower);
         const upperSqrt = TickMath.getSqrtRatioAtTick(tickUpper);
-
-        if (sqrtPriceX96 < lowerSqrt || sqrtPriceX96 > upperSqrt) {
-            return [0, 0];
-        }
 
         const liquidity = maxLiquidityForAmounts(
             lowerSqrt,
@@ -411,6 +531,7 @@ export class UniswapV3PoolUtil {
         const feeGrowthNow = await this.getFeeGrowthInside(tickLower, tickUpper, 0, blockTime);
         const feeGrowthBefore = await this.getFeeGrowthInside(tickLower, tickUpper, secondsAgo, blockTime);
 
+        console.log(feeGrowthNow[0].toString(), feeGrowthBefore[0].toString(), BigInt(liquidity.toString()));
         const fee0Growth = this.calculateFee(BigInt(feeGrowthNow[0].toString()), BigInt(feeGrowthBefore[0].toString()), BigInt(liquidity.toString()));
         const fee1Growth = this.calculateFee(BigInt(feeGrowthNow[1].toString()), BigInt(feeGrowthBefore[1].toString()), BigInt(liquidity.toString()));
 

@@ -1,55 +1,52 @@
+import { Provider } from 'ethers';
 import { UniswapV3PoolUtil } from '../UniswapPositionUitl';
 import { ethers } from 'hardhat';
 import JSBI from 'jsbi';
 
-const pool = "0x172fcD41E0913e95784454622d1c3724f546f849";
+const poolAddress = "0x172fcD41E0913e95784454622d1c3724f546f849";
 const chainId = 56;
 
-const initialBorrowed = 7.5;
+const poolTicks = [-65030];
+const exitTicks = [-65060];
 
-const token1BorrowAmount = JSBI.BigInt(ethers.parseEther(initialBorrowed.toString()).toString());
-const tickRange = 20;
-const deltaTick = 2;
+const token0Amount = JSBI.BigInt(ethers.parseEther("3000").toString());
 
-const swapSlippage = 0.0003;
-const feeRate = 0.0001;
-const totalSwapLoss = swapSlippage + feeRate;
+const trigger = [
+  { tickLower: -65092, tickUpper: -65054, triggerTick: -65092 }
+];
 
 async function main() {
   try {
+    const simulator = await initFromPool(chainId, poolAddress, ethers.provider, trigger, token0Amount);
 
-    const position = await UniswapV3PoolUtil.fromPool(chainId, pool, ethers.provider);
+    let index = 0;
+    while (true) {
+      // const currentTick = await pool.poolTick();
 
-    
-    const currentTick = await position.poolTick();
-    // const tickLower = currentTick - 1;
-    // const tickUpper = currentTick - 1 + tickRange;
-    const tickLower = -65092;
-    const tickUpper = -65054;
-    console.log("tickLower", tickLower, "tickUpper", tickUpper);
+      if (index === poolTicks.length) {
+        break;
+      }
 
-    const sellToken1 = position.singleSideToken1Summary(
-      token1BorrowAmount,
-      tickLower,
-      tickUpper,
-      totalSwapLoss
-    );
-    console.table(sellToken1);
+      const currentTick = poolTicks[index];
+      const exitTick = exitTicks[index];
+      index += 1;
 
-    const token0Balance = sellToken1[0].token0;
+      // if (simulator.shouldRearrange(currentTick)) {
+      //   continue;
+      // }
 
-    const buyToken1 = position.singleSideToken0Summary(
-      JSBI.BigInt(ethers.parseEther(token0Balance.toString()).toString()),
-      tickLower + deltaTick,
-      tickUpper + deltaTick,
-      totalSwapLoss
-    );
+      const newRange = simulator.nextBalanceRange(currentTick, exitTick);
 
-    const token1FinalBalance = buyToken1[buyToken1.length - 1].token1;
+      // const rebalancePosition = simulator.rebalance(currentTick, newRange);
+      // rebalancePosition['currentTick'] = currentTick;
+      // rebalancePosition['tickLower'] = newRange[0];
+      // rebalancePosition['tickUpper'] = newRange[1];
+      // stats.push(rebalancePosition);
 
-    console.table(buyToken1);
-    console.log("net gain", token1FinalBalance - initialBorrowed);
+      break;
+    }
 
+    // console.table(stats);
   } catch (error) {
     console.error(error);
     process.exit(1);
@@ -58,16 +55,109 @@ async function main() {
 
 main();
 
+class Ratio {
+  numerator: number;
+  denominator: number;
 
-/// Token 0 principle protection strategy (T0PP Strategy)
+  constructor(numerator: number, denominator: number) {
+    this.numerator = numerator;
+    this.denominator = denominator;
+  }
+}
+
+interface Trigger {
+  triggerTick: number,
+  tickLower: number,
+  tickUpper: number,
+}
+
+interface UniswapPosition {
+  tickLower: number,
+  tickUpper: number,
+  liquidity: JSBI,
+}
+
+async function initFromPool(chainId: number, poolAddress: string, provider: Provider, nextTriggers: Trigger[], principle: JSBI): Promise<T0PPStrategySimulator> {
+  const pool = await UniswapV3PoolUtil.fromPool(chainId, poolAddress, provider);
+  return new T0PPStrategySimulator(pool, principle, nextTriggers);
+}
+
+/// Token 0 Principle Protection strategy (T0PP)
 class T0PPStrategySimulator {
-  public init(tickLower: number, tickUpper: number, amount: JSBI, is0SingleSide: boolean) {
+  readonly pool: UniswapV3PoolUtil;
+  readonly principle: JSBI;
 
+  position: UniswapPosition;
+  
+  // the last element is the current position range
+  nextTriggers: Trigger[];
+
+  constructor(pool: UniswapV3PoolUtil, principle: JSBI, nextTriggers: Trigger[]) {
+    this.pool = pool;
+    this.principle = principle;
+    this.nextTriggers = nextTriggers;
+
+    const trigger = this.currentTrigger();
+    if (trigger === null) {
+      throw Error("invalid triger length");
+    }
+
+    this.position = { 
+      tickLower: trigger.tickLower,
+      tickUpper: trigger.tickUpper,
+      liquidity: this.pool.liquidity(principle, JSBI.BigInt(0), trigger.triggerTick, trigger.tickLower, trigger.tickUpper)
+    };
   }
 
-  public tokenBalances() {}
+  currentTrigger(): Trigger | null {
+    if (this.nextTriggers.length === 0) {
+      return null;
+    }
 
-  public setCurrentTick(tick: number) {}
+    const lastItemIndex = this.nextTriggers.length - 1;
+    return this.nextTriggers[lastItemIndex];
+  }
 
-  public 
+  public shouldRearrange(currentTick: number): boolean {
+    // const [amount0, amount1] = 
+    return true;
+  }
+
+  public tokenBalances(currentTick: number): [JSBI, JSBI] {
+    return [JSBI.BigInt(0), JSBI.BigInt(0)];
+  }
+
+  public nextBalanceRange(currentTick: number, exitTick: number): [number, number] {
+    if (exitTick > this.position.tickUpper) {
+      throw Error("exit too late");
+    }
+
+    if (currentTick < this.position.tickUpper) {
+      throw Error("no need to rebalance");
+    }
+
+    const [amount0, amount1] = this.pool.balancesAtTickFromLiquidity(this.position.liquidity, this.position.tickLower, this.position.tickUpper, exitTick);
+
+    console.log("principle", JSBI.divide(this.principle, JSBI.BigInt(Math.pow(10, this.pool.token0.decimals).toString())).toString(), "amount0", amount0.toExact(), "amount1" , amount1.toExact());
+
+    // assuming all ticks are negative
+    const results = [];
+    const openPositionTick = currentTick;
+    const tickUpper = currentTick - 1;
+
+    for (let tick = this.position.tickLower ; tick < currentTick - 1; tick += 1) {
+      const tickLower = tick;
+      const targetClosePositionTick = tick  - 1;
+
+      // console.log(openPositionTick, tickLower, tickUpper, targetClosePositionTick);
+      const [newAmount0, newAmount1] = this.pool.balancesAtTickFromAmounts(JSBI.BigInt(0), amount1.quotient, openPositionTick, tickLower, tickUpper, targetClosePositionTick);
+      results.push({
+        openPositionTick, tickLower, tickUpper, targetClosePositionTick, amount0: (newAmount0.add(amount0)).toExact(), amount1: newAmount1.toExact()
+      });
+    }
+
+    console.table(results);
+
+    return [0, 0];
+  }
 }
