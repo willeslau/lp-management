@@ -91,8 +91,8 @@ def run(df: pd.DataFrame, window_size: int, threshold_1v6: float, threshold_1v12
     for idx, row in df.iterrows():
         if not has_opened_pos:
             open_price = row['close']
-            predicted_lower_range = open_price * (1 - row['vol_5'] * ratio)
-            predicted_upper_range = open_price * (1 + row['vol_5'] * ratio)
+            predicted_lower_range = open_price * (1 - row['vol_5'])
+            predicted_upper_range = open_price * (1 + row['vol_5'])
 
             in_range_slot = 0
             has_opened_pos = True
@@ -166,14 +166,14 @@ def run(df: pd.DataFrame, window_size: int, threshold_1v6: float, threshold_1v12
 
 if __name__ == "__main__":
     while True:
-        start_time, end_time = previous_hours_to_interval(3)
-        interval = "1m"
-        output_file="./bnb_1m_klines.csv"
-        limit = 360
+        start_time, end_time = previous_hours_to_interval(1440)
+        interval = "8h"
+        output_file="./bnb_8h_klines.csv"
+        limit = 180
 
         get_recent_24h_klines(start_time, end_time, limit, interval, output_file, "BNBUSDT")
 
-        df = pd.read_csv("./bnb_1m_klines.csv", parse_dates=["open_time"])
+        df = pd.read_csv("./bnb_8h_klines.csv", parse_dates=["open_time"])
 
         df = df.drop('volume(Volatile)', axis = 1)
         # df = df.drop('volume(USDT)', axis = 1)
