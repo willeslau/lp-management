@@ -8,12 +8,16 @@ const chainId = 56;
 
 const poolTicks = [-65030];
 const exitTicks = [-65060];
-
+const tickDelta = 20;
 const token0Amount = JSBI.BigInt(ethers.parseEther("3000").toString());
 
 const trigger = [
-  { tickLower: -65092, tickUpper: -65054, triggerTick: -65092 }
+  { tickLower: 0, tickUpper: -65052, triggerTick: 0 }
 ];
+trigger[0].tickLower = trigger[0].tickUpper - tickDelta;
+trigger[0].triggerTick = trigger[0].tickLower;
+
+console.log(trigger);
 
 async function main() {
   try {
@@ -147,12 +151,12 @@ class T0PPStrategySimulator {
 
     for (let tick = this.position.tickLower ; tick < currentTick - 1; tick += 1) {
       const tickLower = tick;
-      const targetClosePositionTick = tick  - 1;
+      const targetClosePositionTick = tickLower - 1;
 
       // console.log(openPositionTick, tickLower, tickUpper, targetClosePositionTick);
       const [newAmount0, newAmount1] = this.pool.balancesAtTickFromAmounts(JSBI.BigInt(0), amount1.quotient, openPositionTick, tickLower, tickUpper, targetClosePositionTick);
       results.push({
-        openPositionTick, tickLower, tickUpper, targetClosePositionTick, amount0: (newAmount0.add(amount0)).toExact(), amount1: newAmount1.toExact()
+        openPositionTick, tickLower, tickUpper, targetClosePositionTick, amount0: (newAmount0.add(amount0)).toExact()
       });
     }
 

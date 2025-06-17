@@ -13,9 +13,9 @@ const chainId = 56;
 // 3405
 
 //
-const amount = JSBI.BigInt(ethers.parseEther("5.714").toString());
-const tickLower = -64879;
-const tickUpper = -64803;
+const amount = JSBI.BigInt(ethers.parseEther("6").toString());
+const tickLower = -64986;
+const tickUpper = -64900;
 
 const swapSlippage = 0.0003;
 const feeRate = 0.0001;
@@ -40,10 +40,10 @@ async function main() {
       tickUpper
     );
 
-    const apr = await position.estimateSingleSideToken1APR(amount, tickLower, 120, 1.5, 18, 18);
+    // const apr = await position.estimateSingleSideToken1APR(amount, tickLower, 120, 1.5, 18, 18);
 
     console.table(loss[0]);
-    console.log(apr);
+    // console.log(apr);
 
   } catch (error) {
     console.error(error);
