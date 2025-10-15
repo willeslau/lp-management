@@ -6,7 +6,8 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
 import {CallbackUtil} from "./Callback.sol";
-import {SwapSlippageError} from "./Errors.sol";
+
+error SwapSlippageError(int256 incoming, int256 min);
 
 enum Swapper {
     UniswapPool

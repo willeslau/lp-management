@@ -20,9 +20,9 @@ let config = {
   solidity: {
     compilers: [
       {
-        version: "0.8.12",
+        version: "0.8.28",
         settings: {
-          viaIR: false,
+          viaIR: true,
           optimizer: {
             enabled: true,
             runs: 1000

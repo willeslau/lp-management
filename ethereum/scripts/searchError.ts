@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { ethers, keccak256, toUtf8Bytes } from "ethers";
 
-const error = "0xa72c86a90000000000000000000000000000000000000000000000000000000000000000";
+const error = "0xabf0f034";
 
 interface ABIInput {
   type: string;

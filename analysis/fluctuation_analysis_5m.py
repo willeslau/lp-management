@@ -2,11 +2,11 @@ import pandas as pd
 import numpy as np
 import math
 from datetime import datetime, timedelta
-from binance_price_candle import previous_hours_to_interval, get_recent_24h_klines
+from binance_price_candle import previous_hours_to_interval, get_recent_24h_klines_dataframe
 
 def rolling_ohlc(df_1m: pd.DataFrame, window: int) -> pd.DataFrame:
     return pd.DataFrame({
-        'timestamp':   df_1m['timestamp_ms'].rolling(window).min(),
+        'timestamp':   df_1m['timestamp'].rolling(window).min(),
         'open':  df_1m['open'].rolling(window).apply(lambda x: x[0], raw=True),
         'high':  df_1m['high'].rolling(window).max(),
         'low':   df_1m['low'].rolling(window).min(),
@@ -101,15 +101,13 @@ def to_ticks(value):
     y = np.round(x / np.log(1.0001), decimals = 0)
     return int(y)
 
-if __name__ == "__main__":
+def run_detection():
     start_time, end_time = previous_hours_to_interval(3)
     interval = "1m"
-    output_file="./bnb_1m_klines.csv"
     limit = 180
 
-    get_recent_24h_klines(start_time, end_time, limit, interval, output_file, "BNBUSDT")
+    df = get_recent_24h_klines_dataframe(start_time, end_time, limit, interval, "BNBBTC")
 
-    df = pd.read_csv("./bnb_1m_klines.csv", parse_dates=["open_time"])
     df = rolling_ohlc(df, 5)
 
     decay = 0.94
@@ -126,9 +124,6 @@ if __name__ == "__main__":
         for i in range(look_back, end):
             train = df[i - look_back : i]
 
-            # (lower, higher) = close_price_range(train, decay, conf)
-            # records.append({'estimator': 'EWMA', 'lower': lower, 'higher': higher})
-
             (lower, higher) = gk_ewma_volatility(train, lambda_ = decay, conf_level = conf)
             row = {'estimator': 'GK_EWMA', 'lower_range': lower, 'higher_range': higher}
 
@@ -144,7 +139,7 @@ if __name__ == "__main__":
             best_metrics = metrics
             # mean_tick = math.ceil(summary['higher_range'].apply(lambda x: to_ticks(x)).mean())
             mean_tick = summary['higher_range'].mean() - 1
-
-    # print("mean_tick", mean_tick)
-    # print(summary)
-    print(pd.DataFrame([best_metrics]), best_look_back, mean_tick)
+    
+    return {
+        "metrics": metrics, "duration": best_look_back, "range": mean_tick
+    }

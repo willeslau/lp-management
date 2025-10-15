@@ -218,6 +218,37 @@ export class UniswapV3PoolUtil {
             const token0 = Number(position.amount0.toExact());
             const token1 = Number(position.amount1.toExact());
 
+            if (tick === openPositionTick) {
+                console.log({
+                tick,
+                token0,
+                token1,
+            });
+            }
+            results.push({
+                tick,
+                token0,
+                token1,
+            });
+        }
+    
+        return results;
+    }
+
+    public balancesFromLiquidity(
+        liquidity: JSBI,
+        tickLower: number,
+        tickUpper: number,
+    ): TickWithAmounts[] {
+        const inRangeLiquidity = 0;
+
+        const results = [];
+        
+        for (let tick = tickLower; tick <= tickUpper; tick += 1) {
+            const pool = new Pool(this.token0, this.token1, this.feeTier,  TickMath.getSqrtRatioAtTick(tick), inRangeLiquidity, tick);
+            const position = new Position({ pool, liquidity, tickLower, tickUpper });
+            const token0 = Number(position.amount0.toExact());
+            const token1 = Number(position.amount1.toExact());
             results.push({
                 tick,
                 token0,
@@ -566,8 +597,14 @@ export class UniswapV3PoolUtil {
     static async tokenMetadata(token: string, provider: Provider): Promise<[string, number]> {
         const tokenContract = await loadContractForQuery("ERC20", token, provider);
         return [
-            await tokenContract.name(),
+            UniswapV3PoolUtil.mapSymbol(await tokenContract.symbol()),
             Number(await tokenContract.decimals())
         ]
+    }
+
+    static mapSymbol(symbol: string): string {
+        if (symbol === "BTCB") { return "BTC"; }
+        if (symbol === "WBNB") { return "BNB"; }
+        return symbol;
     }
 }

@@ -1,5 +1,13 @@
+import axios from 'axios';
 import { Contract, ContractRunner, Signer } from 'ethers';
 import { artifacts, ethers, network, upgrades } from 'hardhat';
+
+export async function getBinancePrice(symbol: string): Promise<number> {
+  const url = `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`;
+  const response = await axios.get(url);
+  const price = parseFloat(response.data.price);
+  return price;
+}
 
 export async function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));

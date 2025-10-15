@@ -57,25 +57,20 @@ def run(df: pd.DataFrame, window_size: int, threshold_1v6: float, threshold_1v12
     # gks['change_coming'] = (gks['z_1v6'] > threshold_1v6) & (gks['z_1v12'] > threshold_1v12)
     gks['fwd_return'] = np.abs(df['close'].pct_change(3).shift(-3)) > 0.002
 
-    # TP = ((gks['change_coming'] == 1) & (gks['result'] == 1)).sum() / len(gks) * 100
-    # FP = ((gks['change_coming'] == 1) & (gks['result'] == 0)).sum() / len(gks) * 100
-    # TN = ((gks['change_coming'] == 0) & (gks['result'] == 0)).sum() / len(gks) * 100
-    # FN = ((gks['change_coming'] == 0) & (gks['result'] == 1)).sum() / len(gks) * 100
-    # print(TP, FP, TN, FN)
-
     fig, ax1 = plt.subplots(figsize=(12, 5))
 
     # Plot open and close price (left y-axis)
     # ax1.plot(df.index, df['open'], label='Open Price', color='tab:blue', alpha=0.7)
-    ax1.plot(gks.index, gks['fwd_return'], label='Close Price', color='tab:cyan', alpha=0.7)
+    ax1.plot(gks.index, gks['close'], label='Close Price', color='tab:cyan', alpha=0.7)
     ax1.set_ylabel("Price", color='tab:blue')
     ax1.tick_params(axis='y', labelcolor='tab:blue')
     ax1.set_xlabel("Timestamp")
 
     # Create right y-axis for volatility ratios
     ax2 = ax1.twinx()
-    ax2.plot(gks.index, gks['z_1v6'], label='Change coming', color='tab:red', linewidth=1.2)
-    ax2.plot(gks.index, gks['z_1v12'],  label='5m / 1h Vol Ratio',  color='tab:orange', linewidth=1.2)
+    ax2.plot(gks.index, gks['gk_1'], label='5m Vol Ratio', color='tab:red', linewidth=1.2)
+    ax2.plot(gks.index, gks['gk_6'], label='30m Vol Ratio', color='tab:red', linewidth=1.2)
+    ax2.plot(gks.index, gks['gk_12'],  label='5m / 1h Vol Ratio',  color='tab:orange', linewidth=1.2)
     ax2.set_ylabel("GK Volatility Ratio", color='tab:red')
     ax2.tick_params(axis='y', labelcolor='tab:red')
 
@@ -90,12 +85,12 @@ def run(df: pd.DataFrame, window_size: int, threshold_1v6: float, threshold_1v12
     plt.show()
 
 if __name__ == "__main__":
-    # start_time, end_time = previous_hours_to_interval(30)
-    # interval = "5m"
-    # output_file="./bnb_5m_klines.csv"
-    # limit = 360
+    start_time, end_time = previous_hours_to_interval(30)
+    interval = "5m"
+    output_file="./bnb_5m_klines.csv"
+    limit = 360
 
-    # get_recent_24h_klines(start_time, end_time, limit, interval, output_file, "BNBUSDT")
+    get_recent_24h_klines(start_time, end_time, limit, interval, output_file, "BNBUSDT")
 
     df = pd.read_csv("./bnb_5m_klines.csv", parse_dates=["open_time"])
 

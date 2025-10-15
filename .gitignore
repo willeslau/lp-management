@@ -5,13 +5,16 @@ ethereum/typechain-types
 ethereum/.env
 ethereum/coverage.json
 ethereum/coverage
+ethereum/.vscode
 ethereum/.openzeppelin
 
+analysis/__pycache__
 analysis/bin
 analysis/include
 analysis/lib
 analysis/pyvenv.cfg
 analysis/*.csv
+analysis/data
 .DS_Store
 
 app

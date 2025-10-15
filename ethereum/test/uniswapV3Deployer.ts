@@ -3,6 +3,7 @@ import { deployContractWithDeployer, loadContract } from "../scripts/util";
 
 export interface UniswapPool {
     factory: Contract,
+    fee: number,
     pool: Contract,
     token0: string,
     token1: string,
@@ -20,7 +21,8 @@ export async function deployUniswapFactory(deployer: Signer, token0: string, tok
         token1: "",
         tickSpacing: BigInt(0),
         // placeholder
-        pool: factory
+        pool: factory,
+        fee,
     };
 
     let pool = "";

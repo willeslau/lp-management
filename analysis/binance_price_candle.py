@@ -2,6 +2,7 @@ import requests
 import time
 import csv
 from datetime import datetime
+import pandas as pd
 
 def previous_hours_to_interval(hours): 
     end_time = int(time.time() * 1000)
@@ -23,9 +24,6 @@ def get_recent_24h_klines(start_time, end_time, limit, interval, output_file, sy
     response.raise_for_status()
     data = response.json()
 
-    # print(f"共获取 {len(data)} 条记录，保存为 CSV: {output_file}")
-
-    # 写入 CSV 文件
     with open(output_file, mode="w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
         writer.writerow(
@@ -52,3 +50,32 @@ def get_recent_24h_klines(start_time, end_time, limit, interval, output_file, sy
             ]
             writer.writerow(row)
 
+def get_recent_24h_klines_dataframe(start_time, end_time, limit, interval, symbol="BTCUSDT"):
+    url = "https://api.binance.com/api/v3/klines"
+
+    params = {
+        "symbol": symbol,
+        "interval": interval,
+        "startTime": start_time,
+        "endTime": end_time,
+        "limit": limit,
+    }
+
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    data = response.json()
+
+    rows = []
+    for kline in data:
+        rows.append(
+            {
+                "timestamp": kline[0],
+                "open": float(kline[1]),
+                "high": kline[2],
+                "low": kline[3],
+                "close": float(kline[4]),
+                "volume": kline[5],
+                "quote_asset_volume": kline[7],
+            }
+        )
+    return pd.DataFrame(rows)

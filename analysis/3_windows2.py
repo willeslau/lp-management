@@ -135,34 +135,34 @@ def run(df: pd.DataFrame, window_size: int, threshold_1v6: float, threshold_1v12
     # # # FN = ((gks['change_coming'] == 0) & (gks['result'] == 1)).sum() / len(gks) * 100
     # # # print(TP, FP, TN, FN)
 
-    # df = df.join(df_2, how = "inner")
-    # fig, ax1 = plt.subplots(figsize=(12, 5))
+    df = df.join(df_2, how = "inner")
+    fig, ax1 = plt.subplots(figsize=(12, 5))
 
-    # # Plot open and close price (left y-axis)
-    # # ax1.plot(df.index, df['open'], label='Open Price', color='tab:blue', alpha=0.7)
-    # ax1.plot(df.index, df['close'], label='Close', color='tab:cyan', alpha=0.7)
-    # ax1.set_ylabel("Price", color='tab:blue')
-    # ax1.tick_params(axis='y', labelcolor='tab:blue')
-    # ax1.set_xlabel("Timestamp")
+    # Plot open and close price (left y-axis)
+    # ax1.plot(df.index, df['open'], label='Open Price', color='tab:blue', alpha=0.7)
+    ax1.plot(df.index, df['close'], label='Close', color='tab:cyan', alpha=0.7)
+    ax1.set_ylabel("Price", color='tab:blue')
+    ax1.tick_params(axis='y', labelcolor='tab:blue')
+    ax1.set_xlabel("Timestamp")
 
-    # # Create right y-axis for volatility ratios
-    # ax2 = ax1.twinx()
-    # ax2.plot(df.index, df['ratio_5v30'] / df['ratio_5v60'], label='5m / 30m Vol Ratio', color='tab:red', linewidth=1.2)
-    # # ax2.plot(df.index, df['ratio_5v60'],  label='5m / 1h Vol Ratio',  color='tab:orange', linewidth=1.2)
-    # # ax2.plot(df.index, df['ratio_5v30'],  label='ratio_5v30',  color='tab:green', linewidth=1.2)
-    # # ax2.plot(gks.index, gks['change_coming'],  label='change_coming',  color='tab:green', linewidth=1.2)
-    # ax2.set_ylabel("GK Volatility Ratio", color='tab:red')
-    # ax2.tick_params(axis='y', labelcolor='tab:red')
+    # Create right y-axis for volatility ratios
+    ax2 = ax1.twinx()
+    ax2.plot(df.index, df['ratio_5v30'] / df['ratio_5v60'], label='5m / 30m Vol Ratio', color='tab:red', linewidth=1.2)
+    # ax2.plot(df.index, df['ratio_5v60'],  label='5m / 1h Vol Ratio',  color='tab:orange', linewidth=1.2)
+    # ax2.plot(df.index, df['ratio_5v30'],  label='ratio_5v30',  color='tab:green', linewidth=1.2)
+    # ax2.plot(gks.index, gks['change_coming'],  label='change_coming',  color='tab:green', linewidth=1.2)
+    ax2.set_ylabel("GK Volatility Ratio", color='tab:red')
+    ax2.tick_params(axis='y', labelcolor='tab:red')
 
-    # # Combine legends
-    # lines_1, labels_1 = ax1.get_legend_handles_labels()
-    # lines_2, labels_2 = ax2.get_legend_handles_labels()
-    # ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left')
+    # Combine legends
+    lines_1, labels_1 = ax1.get_legend_handles_labels()
+    lines_2, labels_2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left')
 
-    # plt.title("Open/Close Price + GK Volatility Ratios")
-    # plt.grid(True)
-    # plt.tight_layout()
-    # plt.show()
+    plt.title("Open/Close Price + GK Volatility Ratios")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
     while True:
